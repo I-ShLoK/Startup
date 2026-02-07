@@ -733,6 +733,17 @@ async def setup_demo():
         if existing_startup:
             return {"email": DEMO_EMAIL, "password": DEMO_PASSWORD, "message": "Demo ready"}
 
+        # Check if demo invite code already exists (from previous run with different user)
+        existing_invite = await db.startups.find_one({"invite_code": "DEMO2026"})
+        if existing_invite:
+            # Delete the old demo data to start fresh
+            await db.startups.delete_one({"invite_code": "DEMO2026"})
+            await db.startup_members.delete_many({"startup_id": existing_invite["id"]})
+            await db.tasks.delete_many({"startup_id": existing_invite["id"]})
+            await db.milestones.delete_many({"startup_id": existing_invite["id"]})
+            await db.feedback.delete_many({"startup_id": existing_invite["id"]})
+            await db.subscriptions.delete_many({"startup_id": existing_invite["id"]})
+
         # Create demo startup
         startup_id = str(uuid.uuid4())
         invite_code = "DEMO2026"
