@@ -1,8 +1,14 @@
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowRight, BarChart3, CheckCircle2, Lightbulb, Moon, Rocket, Sun, Target, Users } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+import { ArrowRight, BarChart3, CheckCircle2, Lightbulb, Loader2, Moon, Play, Rocket, Sun, Target, Users } from 'lucide-react';
+import axios from 'axios';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function LandingPage() {
   const navigate = useNavigate();
