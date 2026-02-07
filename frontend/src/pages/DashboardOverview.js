@@ -49,10 +49,10 @@ export default function DashboardOverview() {
     <div className="space-y-8 fade-in" data-testid="dashboard-overview">
       <div>
         <h1 className="text-3xl font-bold font-['Plus_Jakarta_Sans'] tracking-tight">{currentStartup.name}</h1>
-        <p className="text-muted-foreground mt-1">
-          {currentStartup.industry && <Badge variant="outline" className="mr-2">{currentStartup.industry}</Badge>}
+        <div className="flex items-center gap-2 mt-1">
+          {currentStartup.industry && <Badge variant="outline">{currentStartup.industry}</Badge>}
           <Badge variant="outline">{currentStartup.stage} stage</Badge>
-        </p>
+        </div>
       </div>
 
       {/* Stats Grid */}
