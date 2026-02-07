@@ -718,6 +718,29 @@ async def remove_member(startup_id: str, user_id: str, user=Depends(get_current_
     await db.startup_members.delete_one({"startup_id": startup_id, "user_id": user_id})
     return {"success": True}
 
+@api_router.put("/startups/{startup_id}/members/{user_id}/role")
+async def update_member_role(startup_id: str, user_id: str, body: RoleUpdate, user=Depends(get_current_user)):
+    """Update a member's role (founder only)"""
+    requester = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not requester or requester["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can change member roles")
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+    if body.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}")
+    if body.role == "founder":
+        raise HTTPException(status_code=400, detail="Cannot promote to founder. Transfer ownership instead.")
+    
+    target_member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user_id}, {"_id": 0})
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    
+    await db.startup_members.update_one(
+        {"startup_id": startup_id, "user_id": user_id},
+        {"$set": {"role": body.role}}
+    )
+    return {"success": True, "new_role": body.role}
+
 @api_router.get("/startups/{startup_id}/invite-code")
 async def get_invite_code(startup_id: str, user=Depends(get_current_user)):
     member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
