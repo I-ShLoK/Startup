@@ -58,9 +58,12 @@ export default function AuthPage() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    const redirectUrl = window.location.origin.includes('localhost') 
+      ? window.location.origin + '/auth/callback'
+      : process.env.REACT_APP_BACKEND_URL.replace('/api', '').replace('https://deliverable-hub-2', 'https://deliverable-hub-2') + '/auth/callback';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/auth/callback' },
+      options: { redirectTo: redirectUrl },
     });
     if (error) {
       toast.error(error.message);
