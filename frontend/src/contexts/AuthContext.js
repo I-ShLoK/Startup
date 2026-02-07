@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [startupsLoaded, setStartupsLoaded] = useState(false);
   const [currentStartup, setCurrentStartup] = useState(null);
   const [startups, setStartups] = useState([]);
 
@@ -42,23 +43,25 @@ export function AuthProvider({ children }) {
         headers: { Authorization: `Bearer ${sess.access_token}` },
       });
       setStartups(res.data);
-      if (res.data.length > 0 && !currentStartup) {
+      if (res.data.length > 0) {
         const saved = localStorage.getItem('currentStartupId');
         const found = saved ? res.data.find(s => s.id === saved) : null;
-        setCurrentStartup(found || res.data[0]);
+        setCurrentStartup(prev => prev || found || res.data[0]);
       }
     } catch (e) {
       console.error('Failed to fetch startups', e);
     }
-  }, [currentStartup]);
+    setStartupsLoaded(true);
+  }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess) {
-        fetchProfile(sess);
-        fetchStartups(sess);
+        await Promise.all([fetchProfile(sess), fetchStartups(sess)]);
+      } else {
+        setStartupsLoaded(true);
       }
       setLoading(false);
     });
@@ -67,12 +70,14 @@ export function AuthProvider({ children }) {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess) {
+        setStartupsLoaded(false);
         fetchProfile(sess);
         fetchStartups(sess);
       } else {
         setProfile(null);
         setStartups([]);
         setCurrentStartup(null);
+        setStartupsLoaded(true);
       }
     });
 
@@ -86,6 +91,7 @@ export function AuthProvider({ children }) {
     setSession(null);
     setStartups([]);
     setCurrentStartup(null);
+    setStartupsLoaded(false);
     localStorage.removeItem('currentStartupId');
   };
 
@@ -100,7 +106,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, profile, session, loading, signOut,
+      user, profile, session, loading, startupsLoaded, signOut,
       currentStartup, startups, selectStartup, refreshStartups,
       getAuthHeaders,
     }}>
