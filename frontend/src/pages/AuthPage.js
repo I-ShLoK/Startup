@@ -7,7 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Rocket, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Rocket, Mail, Lock, User, ArrowLeft, Play, Loader2 } from 'lucide-react';
+import axios from 'axios';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function AuthPage() {
   const navigate = useNavigate();
