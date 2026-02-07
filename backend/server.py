@@ -493,9 +493,10 @@ async def delete_milestone(milestone_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/startups/{startup_id}/feedback")
 async def create_feedback(startup_id: str, body: FeedbackCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    # All roles can submit feedback
     feedback = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -512,11 +513,24 @@ async def create_feedback(startup_id: str, body: FeedbackCreate, user=Depends(ge
 
 @api_router.get("/startups/{startup_id}/feedback")
 async def get_feedback(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     feedbacks = await db.feedback.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
-    return feedbacks
+    return {"feedbacks": feedbacks, "user_role": member.get("role", "member")}
+
+@api_router.delete("/feedback/{feedback_id}")
+async def delete_feedback(feedback_id: str, user=Depends(get_current_user)):
+    feedback = await db.feedback.find_one({"id": feedback_id}, {"_id": 0})
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    member = await db.startup_members.find_one({"startup_id": feedback["startup_id"], "user_id": user.id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can delete feedback")
+    await db.feedback.delete_one({"id": feedback_id})
+    return {"success": True}
 
 # ==================== ANALYTICS ROUTES ====================
 
