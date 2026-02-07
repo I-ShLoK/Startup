@@ -15,7 +15,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const { session, refreshStartups } = useAuth();
+  const { session, refreshStartups, getAuthHeaders } = useAuth();
   const [step, setStep] = useState('role'); // 'role' | 'create' | 'join'
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', industry: '', stage: 'idea', website: '' });
@@ -24,16 +24,28 @@ export default function OnboardingPage() {
   const handleCreateStartup = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error('Startup name is required'); return; }
+    
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) {
+      toast.error('Session expired. Please sign in again.');
+      navigate('/auth');
+      return;
+    }
+    
     setLoading(true);
     try {
-      await axios.post(`${API}/startups`, form, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      await axios.post(`${API}/startups`, form, { headers });
       await refreshStartups();
       toast.success('Workspace created! Welcome aboard.');
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to create workspace');
+      const errorMsg = err.response?.data?.detail || 'Failed to create workspace';
+      if (errorMsg.includes('token') || errorMsg.includes('expired') || errorMsg.includes('authenticated')) {
+        toast.error('Session expired. Please sign in again.');
+        navigate('/auth');
+      } else {
+        toast.error(errorMsg);
+      }
     }
     setLoading(false);
   };
@@ -41,16 +53,28 @@ export default function OnboardingPage() {
   const handleJoinStartup = async (e) => {
     e.preventDefault();
     if (!inviteCode.trim()) { toast.error('Please enter an invite code'); return; }
+    
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) {
+      toast.error('Session expired. Please sign in again.');
+      navigate('/auth');
+      return;
+    }
+    
     setLoading(true);
     try {
-      await axios.post(`${API}/startups/join`, { invite_code: inviteCode.trim() }, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      await axios.post(`${API}/startups/join`, { invite_code: inviteCode.trim() }, { headers });
       await refreshStartups();
       toast.success('Joined workspace successfully!');
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Invalid invite code');
+      const errorMsg = err.response?.data?.detail || 'Invalid invite code';
+      if (errorMsg.includes('token') || errorMsg.includes('expired') || errorMsg.includes('authenticated')) {
+        toast.error('Session expired. Please sign in again.');
+        navigate('/auth');
+      } else {
+        toast.error(errorMsg);
+      }
     }
     setLoading(false);
   };
