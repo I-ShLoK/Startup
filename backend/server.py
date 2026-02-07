@@ -648,6 +648,203 @@ async def update_subscription(startup_id: str, body: SubscriptionUpdate, user=De
     sub = await db.subscriptions.find_one({"startup_id": startup_id}, {"_id": 0})
     return sub
 
+# ==================== DEMO MODE ====================
+
+DEMO_EMAIL = "demo@startupops.io"
+DEMO_PASSWORD = "DemoUser2026!"
+
+@api_router.post("/demo/setup")
+async def setup_demo():
+    """Create a demo user with pre-populated sample data"""
+    try:
+        # Try to create demo user via Supabase admin API
+        try:
+            user_response = supabase_client.auth.admin.create_user({
+                "email": DEMO_EMAIL,
+                "password": DEMO_PASSWORD,
+                "email_confirm": True,
+                "user_metadata": {"full_name": "Demo Founder"}
+            })
+            demo_user_id = user_response.user.id
+        except Exception:
+            # User might already exist - try signing in to get their ID
+            try:
+                sign_in = supabase_client.auth.sign_in_with_password({
+                    "email": DEMO_EMAIL,
+                    "password": DEMO_PASSWORD
+                })
+                demo_user_id = sign_in.user.id
+            except Exception:
+                # Last resort: look up in profiles
+                existing = await db.profiles.find_one({"email": DEMO_EMAIL}, {"_id": 0})
+                if existing:
+                    demo_user_id = existing["id"]
+                else:
+                    raise HTTPException(status_code=500, detail="Could not create demo user")
+
+        # Create/update profile
+        existing_profile = await db.profiles.find_one({"id": demo_user_id})
+        if not existing_profile:
+            profile = {
+                "id": demo_user_id,
+                "email": DEMO_EMAIL,
+                "full_name": "Demo Founder",
+                "avatar_url": "",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.profiles.insert_one(profile)
+
+        # Check if demo startup already exists
+        existing_startup = await db.startups.find_one({"founder_id": demo_user_id, "name": "NexaFlow AI"})
+        if existing_startup:
+            return {"email": DEMO_EMAIL, "password": DEMO_PASSWORD, "message": "Demo ready"}
+
+        # Create demo startup
+        startup_id = str(uuid.uuid4())
+        invite_code = "DEMO2026"
+        startup = {
+            "id": startup_id,
+            "name": "NexaFlow AI",
+            "description": "AI-powered workflow automation platform that helps mid-market companies reduce manual processes by 70% through intelligent document processing and task routing.",
+            "industry": "ai_ml",
+            "stage": "mvp",
+            "website": "https://nexaflow.ai",
+            "founder_id": demo_user_id,
+            "invite_code": invite_code,
+            "subscription_plan": "pro",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.startups.insert_one(startup)
+
+        # Create founder membership
+        await db.startup_members.insert_one({
+            "id": str(uuid.uuid4()), "startup_id": startup_id,
+            "user_id": demo_user_id, "role": "founder",
+            "joined_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        # Create demo team members as profiles + memberships
+        team_data = [
+            {"name": "Arjun Mehta", "email": "arjun@nexaflow.ai", "role": "member"},
+            {"name": "Priya Sharma", "email": "priya@nexaflow.ai", "role": "member"},
+            {"name": "Vikram Patel", "email": "vikram@nexaflow.ai", "role": "member"},
+        ]
+        for tm in team_data:
+            tm_id = str(uuid.uuid4())
+            await db.profiles.update_one(
+                {"email": tm["email"]},
+                {"$setOnInsert": {"id": tm_id, "email": tm["email"], "full_name": tm["name"], "avatar_url": "", "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True
+            )
+            member_profile = await db.profiles.find_one({"email": tm["email"]}, {"_id": 0})
+            existing_member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": member_profile["id"]})
+            if not existing_member:
+                await db.startup_members.insert_one({
+                    "id": str(uuid.uuid4()), "startup_id": startup_id,
+                    "user_id": member_profile["id"], "role": tm["role"],
+                    "joined_at": datetime.now(timezone.utc).isoformat(),
+                })
+
+        # Get team member IDs for assignment
+        all_members = await db.startup_members.find({"startup_id": startup_id}, {"_id": 0}).to_list(20)
+        member_ids = [m["user_id"] for m in all_members]
+
+        # Create demo milestones
+        milestones_data = [
+            {"title": "MVP Launch", "description": "Ship core AI document processing engine with basic UI", "target_date": "2026-03-15", "status": "in_progress"},
+            {"title": "Beta Program", "description": "Onboard 20 pilot customers for feedback and validation", "target_date": "2026-05-01", "status": "pending"},
+            {"title": "Series A Prep", "description": "Reach $50K MRR and prepare investor deck for fundraising", "target_date": "2026-08-01", "status": "pending"},
+            {"title": "Market Validation", "description": "Conduct 50+ customer interviews and validate product-market fit", "target_date": "2026-02-28", "status": "completed"},
+        ]
+        milestone_ids = []
+        for md in milestones_data:
+            m_id = str(uuid.uuid4())
+            milestone_ids.append(m_id)
+            await db.milestones.insert_one({
+                "id": m_id, "startup_id": startup_id,
+                "title": md["title"], "description": md["description"],
+                "target_date": md["target_date"], "status": md["status"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+        # Create demo tasks
+        tasks_data = [
+            {"title": "Design system architecture", "description": "Create microservices architecture diagram and API specs", "status": "done", "priority": "high", "milestone_id": milestone_ids[0]},
+            {"title": "Build document parser", "description": "Implement PDF/DOCX parser using AI extraction", "status": "done", "priority": "high", "milestone_id": milestone_ids[0]},
+            {"title": "Create REST API", "description": "Build FastAPI endpoints for document upload and processing", "status": "done", "priority": "high", "milestone_id": milestone_ids[0]},
+            {"title": "Setup CI/CD pipeline", "description": "Configure GitHub Actions with automated testing and deployment", "status": "done", "priority": "medium", "milestone_id": milestone_ids[0]},
+            {"title": "Build dashboard UI", "description": "React dashboard with document processing status and analytics", "status": "in_progress", "priority": "high", "milestone_id": milestone_ids[0]},
+            {"title": "Implement user auth", "description": "OAuth2 + JWT authentication with role-based access control", "status": "done", "priority": "urgent", "milestone_id": milestone_ids[0]},
+            {"title": "Write API documentation", "description": "OpenAPI/Swagger docs for all endpoints", "status": "in_progress", "priority": "medium", "milestone_id": milestone_ids[0]},
+            {"title": "Create landing page", "description": "Marketing site with product demo video and signup flow", "status": "review", "priority": "medium", "milestone_id": milestone_ids[1]},
+            {"title": "Beta onboarding flow", "description": "Self-serve onboarding wizard for new pilot customers", "status": "in_progress", "priority": "high", "milestone_id": milestone_ids[1]},
+            {"title": "Customer feedback system", "description": "In-app feedback widget + NPS survey integration", "status": "todo", "priority": "medium", "milestone_id": milestone_ids[1]},
+            {"title": "Usage analytics dashboard", "description": "Track document processing volume, user engagement metrics", "status": "todo", "priority": "medium", "milestone_id": milestone_ids[1]},
+            {"title": "Pricing page design", "description": "Design and implement tiered pricing with feature comparison", "status": "review", "priority": "high", "milestone_id": milestone_ids[2]},
+            {"title": "Financial model update", "description": "Update revenue projections with beta customer data", "status": "todo", "priority": "high", "milestone_id": milestone_ids[2]},
+            {"title": "Investor pitch deck", "description": "Create 15-slide pitch deck with traction metrics", "status": "todo", "priority": "urgent", "milestone_id": milestone_ids[2]},
+            {"title": "Competitive analysis", "description": "Deep-dive into competitors: DocuSign AI, Automation Anywhere", "status": "done", "priority": "medium", "milestone_id": milestone_ids[3]},
+            {"title": "Customer interviews", "description": "Conduct 50 structured interviews with target personas", "status": "done", "priority": "high", "milestone_id": milestone_ids[3]},
+            {"title": "Market sizing research", "description": "Calculate TAM/SAM/SOM for AI workflow automation", "status": "done", "priority": "medium", "milestone_id": milestone_ids[3]},
+            {"title": "Setup error monitoring", "description": "Integrate Sentry for error tracking and alerting", "status": "todo", "priority": "low", "milestone_id": milestone_ids[0]},
+            {"title": "Performance optimization", "description": "Optimize document processing to under 3s per page", "status": "todo", "priority": "medium", "milestone_id": milestone_ids[0]},
+            {"title": "Security audit", "description": "Run OWASP security scan and fix vulnerabilities", "status": "todo", "priority": "urgent", "milestone_id": milestone_ids[1]},
+        ]
+        for i, td in enumerate(tasks_data):
+            await db.tasks.insert_one({
+                "id": str(uuid.uuid4()), "startup_id": startup_id,
+                "title": td["title"], "description": td["description"],
+                "status": td["status"], "priority": td["priority"],
+                "assigned_to": member_ids[i % len(member_ids)],
+                "created_by": demo_user_id,
+                "milestone_id": td.get("milestone_id"),
+                "due_date": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+        # Create demo feedback
+        feedback_data = [
+            {"title": "Document parsing accuracy impressive", "content": "Tested with 100 invoices, 97% accuracy rate on field extraction. Better than manual processing.", "category": "product", "rating": 5, "source": "external"},
+            {"title": "UI needs dark mode", "content": "Several users requested dark mode support for the dashboard. Current white theme causes eye strain.", "category": "product", "rating": 3, "source": "internal"},
+            {"title": "Integration with Slack needed", "content": "Most target customers use Slack. They want notifications when documents are processed.", "category": "technical", "rating": 4, "source": "external"},
+            {"title": "Pricing seems competitive", "content": "Compared to Automation Anywhere ($40K/yr), our $199/mo is very attractive to mid-market.", "category": "business", "rating": 5, "source": "internal"},
+            {"title": "Onboarding takes too long", "content": "Average time to first document processed is 25 minutes. Target should be under 5 minutes.", "category": "product", "rating": 2, "source": "external"},
+            {"title": "Enterprise security requirements", "content": "Three enterprise leads require SOC2 compliance before signing. Need to prioritize.", "category": "business", "rating": 3, "source": "external"},
+            {"title": "Mobile responsiveness lacking", "content": "Dashboard doesn't work well on tablets. Operations managers need mobile access.", "category": "technical", "rating": 2, "source": "internal"},
+            {"title": "Great customer discovery insights", "content": "Interviews revealed pain point: 60% of time spent on manual document routing between departments.", "category": "market", "rating": 5, "source": "internal"},
+            {"title": "API response time concerns", "content": "Batch processing of 50+ documents causes timeout. Need queue-based architecture.", "category": "technical", "rating": 3, "source": "internal"},
+            {"title": "Competitor just raised Series B", "content": "DocFlow AI raised $25M. We need to move faster on key differentiators.", "category": "market", "rating": 4, "source": "internal"},
+        ]
+        for fd in feedback_data:
+            await db.feedback.insert_one({
+                "id": str(uuid.uuid4()), "startup_id": startup_id,
+                "title": fd["title"], "content": fd["content"],
+                "category": fd["category"], "rating": fd["rating"],
+                "submitted_by": member_ids[feedback_data.index(fd) % len(member_ids)],
+                "source": fd["source"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+        # Create demo subscription
+        await db.subscriptions.insert_one({
+            "id": str(uuid.uuid4()), "startup_id": startup_id,
+            "plan": "pro", "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return {"email": DEMO_EMAIL, "password": DEMO_PASSWORD, "message": "Demo ready"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Demo setup error: {e}")
+        raise HTTPException(status_code=500, detail=f"Demo setup failed: {str(e)}")
+
 # ==================== APP SETUP ====================
 
 app.include_router(api_router)
