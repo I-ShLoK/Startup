@@ -75,6 +75,28 @@ export default function AuthPage() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    setDemoLoading(true);
+    try {
+      // Setup demo data
+      await axios.post(`${API}/demo/setup`);
+      // Sign in with demo credentials
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'demo@startupops.io',
+        password: 'DemoUser2026!',
+      });
+      if (error) {
+        toast.error('Demo login failed: ' + error.message);
+      } else {
+        toast.success('Welcome to the demo! Explore pre-populated data.');
+      }
+    } catch (e) {
+      toast.error('Failed to set up demo. Please try again.');
+      console.error(e);
+    }
+    setDemoLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background relative" data-testid="auth-page">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/3" />
