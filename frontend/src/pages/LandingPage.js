@@ -14,6 +14,27 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  const handleDemoLogin = async () => {
+    setDemoLoading(true);
+    try {
+      await axios.post(`${API}/demo/setup`);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'demo@startupops.io',
+        password: 'DemoUser2026!',
+      });
+      if (error) {
+        toast.error('Demo login failed: ' + error.message);
+      } else {
+        toast.success('Welcome to the demo!');
+        navigate('/dashboard');
+      }
+    } catch (e) {
+      toast.error('Demo setup failed. Please try again.');
+    }
+    setDemoLoading(false);
+  };
 
   const features = [
     { icon: Target, title: 'Task & Milestone Tracking', desc: 'Kanban boards, milestones, and clear execution flow to keep your team aligned.' },
