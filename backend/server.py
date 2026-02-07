@@ -107,6 +107,38 @@ class SignupRequest(BaseModel):
     password: str
     full_name: Optional[str] = None
 
+class RoleUpdate(BaseModel):
+    role: str  # founder, manager, member
+
+class TaskStatusUpdate(BaseModel):
+    status: str  # todo, in_progress, review, done
+
+# ==================== ROLE-BASED PERMISSIONS ====================
+
+# Role hierarchy: founder > manager > member
+ROLE_HIERARCHY = {"founder": 3, "manager": 2, "member": 1}
+VALID_ROLES = ["founder", "manager", "member"]
+
+def can_manage_content(role: str) -> bool:
+    """Check if role can create/edit/delete tasks, milestones, feedback"""
+    return role in ["founder", "manager"]
+
+def can_view_analytics(role: str) -> bool:
+    """Check if role can view analytics and AI insights"""
+    return role in ["founder", "manager"]
+
+def can_access_pitch(role: str) -> bool:
+    """Check if role can access pitch generator"""
+    return role == "founder"
+
+def can_manage_team(role: str) -> bool:
+    """Check if role can view invite code, remove members, change roles"""
+    return role == "founder"
+
+def can_manage_startup(role: str) -> bool:
+    """Check if role can edit startup settings and subscription"""
+    return role == "founder"
+
 # ==================== AUTH DEPENDENCY ====================
 
 async def get_current_user(request: Request):
