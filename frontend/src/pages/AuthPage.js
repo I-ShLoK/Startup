@@ -15,6 +15,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 export default function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [tab, setTab] = useState('login');
 
   useEffect(() => {
