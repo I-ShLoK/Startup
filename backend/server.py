@@ -131,6 +131,24 @@ async def root():
 
 # ==================== AUTH ROUTES ====================
 
+@api_router.post("/auth/signup")
+async def signup_user(body: SignupRequest):
+    """Create user with auto-confirm so they can start immediately."""
+    try:
+        user_response = supabase_client.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+            "user_metadata": {"full_name": body.full_name or body.email.split("@")[0]},
+        })
+        return {"message": "Account created", "user_id": user_response.user.id}
+    except Exception as e:
+        error_msg = str(e)
+        if "already been registered" in error_msg or "already exists" in error_msg:
+            raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
+        logger.error(f"Signup error: {e}")
+        raise HTTPException(status_code=400, detail="Failed to create account")
+
 @api_router.post("/auth/verify")
 async def verify_and_sync_profile(body: ProfileCreate, user=Depends(get_current_user)):
     existing = await db.profiles.find_one({"id": user.id}, {"_id": 0})
