@@ -321,9 +321,11 @@ async def join_startup(body: JoinStartupRequest, user=Depends(get_current_user))
 
 @api_router.post("/startups/{startup_id}/tasks")
 async def create_task(startup_id: str, body: TaskCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can create tasks")
     task = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -343,20 +345,35 @@ async def create_task(startup_id: str, body: TaskCreate, user=Depends(get_curren
 
 @api_router.get("/startups/{startup_id}/tasks")
 async def get_tasks(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(1000)
-    return tasks
+    # Add user_role to response for frontend permission checking
+    return {"tasks": tasks, "user_role": member.get("role", "member")}
 
 @api_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskUpdate, user=Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    
+    role = member.get("role", "member")
+    
+    # Members can only update status of tasks assigned to them
+    if role == "member":
+        is_assigned_to_user = task.get("assigned_to") == user.id
+        is_only_status_update = body.status is not None and all(
+            getattr(body, f, None) is None for f in ["title", "description", "priority", "assigned_to", "milestone_id", "due_date"]
+        )
+        if not is_assigned_to_user:
+            raise HTTPException(status_code=403, detail="Members can only update tasks assigned to them")
+        if not is_only_status_update:
+            raise HTTPException(status_code=403, detail="Members can only change task status")
+    
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for field in ["title", "description", "status", "priority", "assigned_to", "milestone_id", "due_date"]:
         val = getattr(body, field, None)
@@ -366,14 +383,39 @@ async def update_task(task_id: str, body: TaskUpdate, user=Depends(get_current_u
     updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return updated
 
+# New endpoint for members to only update task status
+@api_router.patch("/tasks/{task_id}/status")
+async def update_task_status(task_id: str, body: TaskStatusUpdate, user=Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    role = member.get("role", "member")
+    
+    # Members can only update status of tasks assigned to them
+    if role == "member" and task.get("assigned_to") != user.id:
+        raise HTTPException(status_code=403, detail="Members can only update tasks assigned to them")
+    
+    if body.status not in ["todo", "in_progress", "review", "done"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": {"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return updated
+
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, user=Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can delete tasks")
     await db.tasks.delete_one({"id": task_id})
     return {"success": True}
 
