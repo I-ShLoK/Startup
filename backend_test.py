@@ -7,7 +7,7 @@ from datetime import datetime
 import uuid
 
 class StartupOpsAPITester:
-    def __init__(self, base_url="https://ops-workspace-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://workspace-auth-fix.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
