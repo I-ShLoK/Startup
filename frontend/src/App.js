@@ -19,16 +19,16 @@ import SettingsPage from "@/pages/SettingsPage";
 import PricingPage from "@/pages/PricingPage";
 
 function ProtectedRoute({ children }) {
-  const { user, loading, startups } = useAuth();
-  if (loading) return <div className="flex h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  const { user, loading, startups, startupsLoaded } = useAuth();
+  if (loading || !startupsLoaded) return <div className="flex h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
   if (!user) return <Navigate to="/auth" />;
   if (startups.length === 0 && window.location.pathname !== '/onboarding') return <Navigate to="/onboarding" />;
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { user, loading, startups } = useAuth();
-  if (loading) return <div className="flex h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  const { user, loading, startups, startupsLoaded } = useAuth();
+  if (loading || !startupsLoaded) return <div className="flex h-screen items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
   if (user && startups.length > 0) return <Navigate to="/dashboard" />;
   if (user && startups.length === 0) return <Navigate to="/onboarding" />;
   return children;
