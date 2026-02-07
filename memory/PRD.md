@@ -30,7 +30,9 @@ Build "StartupOps" - a unified digital platform that acts as an operational work
 ## What's Been Implemented (Feb 7, 2026)
 - [x] Landing page with hero, features, CTA sections
 - [x] Auth page (email/password + Google OAuth via Supabase)
-- [x] Onboarding (create startup profile)
+- [x] Onboarding with role selection (Founder vs Team Member)
+- [x] Create workspace flow for Founders
+- [x] Join workspace flow for Team Members (via invite code)
 - [x] Dashboard layout with glassmorphism sidebar
 - [x] Dashboard overview with stats and recent activity
 - [x] Kanban task board (4 columns, create/edit/delete, priority, assignee)
@@ -45,6 +47,15 @@ Build "StartupOps" - a unified digital platform that acts as an operational work
 - [x] Dark/Light theme toggle
 - [x] Role-based access (founder vs member)
 - [x] Responsive design (mobile + desktop)
+- [x] Demo mode with pre-populated sample data
+
+## Bug Fixes (Feb 7, 2026)
+- [x] Fixed "Invalid token" error on workspace creation after Google OAuth
+  - Root cause: OnboardingPage used session.access_token directly without null check
+  - Fix: Use getAuthHeaders() from AuthContext which handles null sessions gracefully
+- [x] Fixed AuthCallbackPage to properly wait for session verification before redirect
+- [x] Fixed HTML nesting issue in DashboardOverview (Badge inside p tag)
+- [x] Fixed demo setup endpoint to handle duplicate invite codes
 
 ## Business Model
 - Free: $0/mo - 1 startup, 5 members, basic features
@@ -62,6 +73,7 @@ Build "StartupOps" - a unified digital platform that acts as an operational work
 ### P0 (Done)
 - All mandatory modules implemented
 - All bonus features implemented
+- Auth bugs fixed
 
 ### P1 (Next)
 - Real-time task updates via WebSockets
