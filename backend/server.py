@@ -1,15 +1,16 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
 import uuid
+import httpx
+from pathlib import Path
+from pydantic import BaseModel, Field
+from typing import List, Optional
 from datetime import datetime, timezone
-
+from supabase import create_client, Client
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -19,54 +20,636 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI()
+# Supabase client for auth verification
+supabase_url = os.environ.get('SUPABASE_URL')
+supabase_service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+supabase_client: Client = create_client(supabase_url, supabase_service_key)
 
-# Create a router with the /api prefix
+# Gemini API key
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
+app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# ==================== PYDANTIC MODELS ====================
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class ProfileCreate(BaseModel):
+    full_name: Optional[str] = None
 
-# Add your routes to the router instead of directly to app
+class StartupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    stage: Optional[str] = "idea"
+    website: Optional[str] = None
+
+class StartupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    stage: Optional[str] = None
+    website: Optional[str] = None
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[str] = "todo"
+    priority: Optional[str] = "medium"
+    assigned_to: Optional[str] = None
+    milestone_id: Optional[str] = None
+    due_date: Optional[str] = None
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assigned_to: Optional[str] = None
+    milestone_id: Optional[str] = None
+    due_date: Optional[str] = None
+
+class MilestoneCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    target_date: Optional[str] = None
+
+class MilestoneUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    target_date: Optional[str] = None
+    status: Optional[str] = None
+
+class FeedbackCreate(BaseModel):
+    title: str
+    content: Optional[str] = None
+    category: Optional[str] = "product"
+    rating: Optional[int] = 3
+    source: Optional[str] = "internal"
+
+class AIInsightRequest(BaseModel):
+    startup_id: str
+    prompt_type: Optional[str] = "general"
+
+class PitchRequest(BaseModel):
+    startup_id: str
+
+class SubscriptionUpdate(BaseModel):
+    plan: str
+
+class JoinStartupRequest(BaseModel):
+    invite_code: str
+
+# ==================== AUTH DEPENDENCY ====================
+
+async def get_current_user(request: Request):
+    auth_header = request.headers.get('authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = auth_header.split(' ')[1]
+    try:
+        user_response = supabase_client.auth.get_user(token)
+        return user_response.user
+    except Exception as e:
+        logger.error(f"Auth error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+# ==================== HEALTH CHECK ====================
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "StartupOps API is running"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+# ==================== AUTH ROUTES ====================
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api_router.post("/auth/verify")
+async def verify_and_sync_profile(body: ProfileCreate, user=Depends(get_current_user)):
+    existing = await db.profiles.find_one({"id": user.id}, {"_id": 0})
+    if existing:
+        return existing
+    profile = {
+        "id": user.id,
+        "email": user.email,
+        "full_name": body.full_name or user.user_metadata.get("full_name", "") or user.user_metadata.get("name", "") or user.email.split("@")[0],
+        "avatar_url": user.user_metadata.get("avatar_url", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.profiles.insert_one(profile)
+    return {k: v for k, v in profile.items() if k != "_id"}
 
-# Include the router in the main app
+@api_router.get("/auth/me")
+async def get_me(user=Depends(get_current_user)):
+    profile = await db.profiles.find_one({"id": user.id}, {"_id": 0})
+    if not profile:
+        profile = {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.user_metadata.get("full_name", "") or user.user_metadata.get("name", "") or user.email.split("@")[0],
+            "avatar_url": user.user_metadata.get("avatar_url", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.profiles.insert_one(profile)
+        return {k: v for k, v in profile.items() if k != "_id"}
+    return profile
+
+@api_router.put("/auth/profile")
+async def update_profile(body: ProfileCreate, user=Depends(get_current_user)):
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.full_name:
+        updates["full_name"] = body.full_name
+    await db.profiles.update_one({"id": user.id}, {"$set": updates})
+    profile = await db.profiles.find_one({"id": user.id}, {"_id": 0})
+    return profile
+
+# ==================== STARTUP ROUTES ====================
+
+@api_router.post("/startups")
+async def create_startup(body: StartupCreate, user=Depends(get_current_user)):
+    invite_code = str(uuid.uuid4())[:8].upper()
+    startup = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "description": body.description or "",
+        "industry": body.industry or "",
+        "stage": body.stage or "idea",
+        "website": body.website or "",
+        "founder_id": user.id,
+        "invite_code": invite_code,
+        "subscription_plan": "free",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.startups.insert_one(startup)
+    member = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup["id"],
+        "user_id": user.id,
+        "role": "founder",
+        "joined_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.startup_members.insert_one(member)
+    return {k: v for k, v in startup.items() if k != "_id"}
+
+@api_router.get("/startups")
+async def get_user_startups(user=Depends(get_current_user)):
+    memberships = await db.startup_members.find({"user_id": user.id}, {"_id": 0}).to_list(100)
+    startup_ids = [m["startup_id"] for m in memberships]
+    startups = await db.startups.find({"id": {"$in": startup_ids}}, {"_id": 0}).to_list(100)
+    for s in startups:
+        membership = next((m for m in memberships if m["startup_id"] == s["id"]), None)
+        s["user_role"] = membership["role"] if membership else "member"
+    return startups
+
+@api_router.get("/startups/{startup_id}")
+async def get_startup(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member of this startup")
+    startup = await db.startups.find_one({"id": startup_id}, {"_id": 0})
+    if not startup:
+        raise HTTPException(status_code=404, detail="Startup not found")
+    startup["user_role"] = member["role"]
+    return startup
+
+@api_router.put("/startups/{startup_id}")
+async def update_startup(startup_id: str, body: StartupUpdate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can update startup")
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ["name", "description", "industry", "stage", "website"]:
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+    await db.startups.update_one({"id": startup_id}, {"$set": updates})
+    startup = await db.startups.find_one({"id": startup_id}, {"_id": 0})
+    return startup
+
+@api_router.post("/startups/join")
+async def join_startup(body: JoinStartupRequest, user=Depends(get_current_user)):
+    startup = await db.startups.find_one({"invite_code": body.invite_code}, {"_id": 0})
+    if not startup:
+        raise HTTPException(status_code=404, detail="Invalid invite code")
+    existing = await db.startup_members.find_one({"startup_id": startup["id"], "user_id": user.id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Already a member")
+    member_count = await db.startup_members.count_documents({"startup_id": startup["id"]})
+    plan = startup.get("subscription_plan", "free")
+    max_members = 5 if plan == "free" else 999
+    if member_count >= max_members:
+        raise HTTPException(status_code=400, detail=f"Team limit reached for {plan} plan")
+    member = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup["id"],
+        "user_id": user.id,
+        "role": "member",
+        "joined_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.startup_members.insert_one(member)
+    return {k: v for k, v in startup.items() if k != "_id"}
+
+# ==================== TASK ROUTES ====================
+
+@api_router.post("/startups/{startup_id}/tasks")
+async def create_task(startup_id: str, body: TaskCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    task = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "title": body.title,
+        "description": body.description or "",
+        "status": body.status or "todo",
+        "priority": body.priority or "medium",
+        "assigned_to": body.assigned_to,
+        "created_by": user.id,
+        "milestone_id": body.milestone_id,
+        "due_date": body.due_date,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.tasks.insert_one(task)
+    return {k: v for k, v in task.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/tasks")
+async def get_tasks(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(1000)
+    return tasks
+
+@api_router.put("/tasks/{task_id}")
+async def update_task(task_id: str, body: TaskUpdate, user=Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ["title", "description", "status", "priority", "assigned_to", "milestone_id", "due_date"]:
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+    await db.tasks.update_one({"id": task_id}, {"$set": updates})
+    updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, user=Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    await db.tasks.delete_one({"id": task_id})
+    return {"success": True}
+
+# ==================== MILESTONE ROUTES ====================
+
+@api_router.post("/startups/{startup_id}/milestones")
+async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    milestone = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "title": body.title,
+        "description": body.description or "",
+        "target_date": body.target_date,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.milestones.insert_one(milestone)
+    return {k: v for k, v in milestone.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/milestones")
+async def get_milestones(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+    for m in milestones:
+        tasks = await db.tasks.find({"milestone_id": m["id"]}, {"_id": 0}).to_list(100)
+        total = len(tasks)
+        done = len([t for t in tasks if t.get("status") == "done"])
+        m["progress"] = int((done / total) * 100) if total > 0 else 0
+        m["task_count"] = total
+        m["tasks_done"] = done
+    return milestones
+
+@api_router.put("/milestones/{milestone_id}")
+async def update_milestone(milestone_id: str, body: MilestoneUpdate, user=Depends(get_current_user)):
+    milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ["title", "description", "target_date", "status"]:
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+    await db.milestones.update_one({"id": milestone_id}, {"$set": updates})
+    updated = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/milestones/{milestone_id}")
+async def delete_milestone(milestone_id: str, user=Depends(get_current_user)):
+    milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    await db.milestones.delete_one({"id": milestone_id})
+    await db.tasks.update_many({"milestone_id": milestone_id}, {"$set": {"milestone_id": None}})
+    return {"success": True}
+
+# ==================== FEEDBACK ROUTES ====================
+
+@api_router.post("/startups/{startup_id}/feedback")
+async def create_feedback(startup_id: str, body: FeedbackCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    feedback = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "title": body.title,
+        "content": body.content or "",
+        "category": body.category or "product",
+        "rating": body.rating or 3,
+        "submitted_by": user.id,
+        "source": body.source or "internal",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.feedback.insert_one(feedback)
+    return {k: v for k, v in feedback.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/feedback")
+async def get_feedback(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    feedbacks = await db.feedback.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    return feedbacks
+
+# ==================== ANALYTICS ROUTES ====================
+
+@api_router.get("/startups/{startup_id}/analytics")
+async def get_analytics(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(1000)
+    milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+    feedbacks = await db.feedback.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    members = await db.startup_members.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+
+    task_stats = {"todo": 0, "in_progress": 0, "review": 0, "done": 0}
+    priority_stats = {"low": 0, "medium": 0, "high": 0, "urgent": 0}
+    for t in tasks:
+        status = t.get("status", "todo")
+        if status in task_stats:
+            task_stats[status] += 1
+        prio = t.get("priority", "medium")
+        if prio in priority_stats:
+            priority_stats[prio] += 1
+
+    milestone_stats = {"pending": 0, "in_progress": 0, "completed": 0}
+    for m in milestones:
+        ms = m.get("status", "pending")
+        if ms in milestone_stats:
+            milestone_stats[ms] += 1
+
+    feedback_by_category = {}
+    avg_rating = 0
+    if feedbacks:
+        for f in feedbacks:
+            cat = f.get("category", "other")
+            feedback_by_category[cat] = feedback_by_category.get(cat, 0) + 1
+        avg_rating = round(sum(f.get("rating", 0) for f in feedbacks) / len(feedbacks), 1)
+
+    total_tasks = len(tasks)
+    completed_tasks = task_stats["done"]
+    completion_rate = round((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+
+    return {
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "completion_rate": completion_rate,
+        "task_stats": task_stats,
+        "priority_stats": priority_stats,
+        "total_milestones": len(milestones),
+        "milestone_stats": milestone_stats,
+        "total_feedback": len(feedbacks),
+        "feedback_by_category": feedback_by_category,
+        "avg_rating": avg_rating,
+        "team_size": len(members),
+    }
+
+# ==================== AI ROUTES (GEMINI) ====================
+
+@api_router.post("/ai/insights")
+async def get_ai_insights(body: AIInsightRequest, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    startup = await db.startups.find_one({"id": body.startup_id}, {"_id": 0})
+    tasks = await db.tasks.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(100)
+    milestones = await db.milestones.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
+    feedbacks = await db.feedback.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
+
+    task_summary = f"Total tasks: {len(tasks)}, Done: {len([t for t in tasks if t.get('status')=='done'])}, In Progress: {len([t for t in tasks if t.get('status')=='in_progress'])}"
+    milestone_summary = f"Total milestones: {len(milestones)}, Completed: {len([m for m in milestones if m.get('status')=='completed'])}"
+    feedback_summary = f"Total feedback: {len(feedbacks)}"
+    if feedbacks:
+        avg = round(sum(f.get("rating", 0) for f in feedbacks) / len(feedbacks), 1)
+        feedback_summary += f", Average rating: {avg}/5"
+
+    prompt_map = {
+        "general": f"Analyze this startup's progress and provide 3-5 actionable insights:\nStartup: {startup.get('name', 'Unknown')} ({startup.get('industry', 'Unknown')} - {startup.get('stage', 'idea')} stage)\n{task_summary}\n{milestone_summary}\n{feedback_summary}\nProvide specific, actionable recommendations for improvement.",
+        "tasks": f"Suggest 5 strategic tasks for this startup:\nStartup: {startup.get('name', 'Unknown')} in {startup.get('industry', 'Unknown')} at {startup.get('stage', 'idea')} stage.\nCurrent tasks: {task_summary}\nSuggest tasks with title, description, and priority level.",
+        "milestones": f"Suggest 3 key milestones for this startup:\nStartup: {startup.get('name', 'Unknown')} in {startup.get('industry', 'Unknown')} at {startup.get('stage', 'idea')} stage.\nCurrent milestones: {milestone_summary}\nSuggest milestones with clear deliverables and target timeframes.",
+        "growth": f"Provide a growth strategy analysis:\nStartup: {startup.get('name', 'Unknown')} in {startup.get('industry', 'Unknown')} at {startup.get('stage', 'idea')} stage.\n{task_summary}\n{milestone_summary}\n{feedback_summary}\nSuggest growth strategies, metrics to track, and potential challenges."
+    }
+    prompt = prompt_map.get(body.prompt_type, prompt_map["general"])
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=GEMINI_API_KEY,
+            session_id=f"insights-{body.startup_id}-{str(uuid.uuid4())[:8]}",
+            system_message="You are a startup advisor AI. Provide concise, actionable insights for early-stage founders. Format your response with clear sections using markdown. Be specific and practical."
+        ).with_model("gemini", "gemini-2.5-flash")
+        response = await chat.send_message(UserMessage(text=prompt))
+        return {"insights": response, "prompt_type": body.prompt_type}
+    except Exception as e:
+        logger.error(f"AI insights error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+@api_router.post("/ai/pitch")
+async def generate_pitch(body: PitchRequest, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    startup = await db.startups.find_one({"id": body.startup_id}, {"_id": 0})
+    tasks = await db.tasks.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(100)
+    milestones = await db.milestones.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
+    feedbacks = await db.feedback.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
+    members = await db.startup_members.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
+
+    completed_tasks = len([t for t in tasks if t.get("status") == "done"])
+    completed_milestones = len([m for m in milestones if m.get("status") == "completed"])
+    avg_rating = round(sum(f.get("rating", 0) for f in feedbacks) / len(feedbacks), 1) if feedbacks else 0
+
+    prompt = f"""Generate a compelling investor pitch outline for this startup:
+
+Startup: {startup.get('name', 'Unknown')}
+Industry: {startup.get('industry', 'Unknown')}
+Stage: {startup.get('stage', 'idea')}
+Description: {startup.get('description', 'No description')}
+Website: {startup.get('website', 'N/A')}
+
+Traction:
+- Team size: {len(members)}
+- Tasks completed: {completed_tasks}/{len(tasks)}
+- Milestones achieved: {completed_milestones}/{len(milestones)}
+- Average feedback rating: {avg_rating}/5
+
+Generate a structured pitch with these sections:
+1. **Problem Statement** - The problem being solved
+2. **Solution** - How the startup solves it
+3. **Market Opportunity** - TAM/SAM/SOM estimates
+4. **Traction & Metrics** - Current progress and KPIs
+5. **Business Model** - Revenue strategy
+6. **Team** - Why this team can execute
+7. **Roadmap** - Future milestones and vision
+8. **The Ask** - What the startup needs from investors
+
+Make it compelling, data-driven where possible, and suitable for a 5-minute pitch."""
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=GEMINI_API_KEY,
+            session_id=f"pitch-{body.startup_id}-{str(uuid.uuid4())[:8]}",
+            system_message="You are an expert startup pitch consultant. Create compelling, professional investor pitch outlines. Use markdown formatting with clear sections."
+        ).with_model("gemini", "gemini-2.5-flash")
+        response = await chat.send_message(UserMessage(text=prompt))
+        return {"pitch": response, "startup_name": startup.get("name", "")}
+    except Exception as e:
+        logger.error(f"Pitch generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+# ==================== TEAM ROUTES ====================
+
+@api_router.get("/startups/{startup_id}/members")
+async def get_members(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    members = await db.startup_members.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+    result = []
+    for m in members:
+        profile = await db.profiles.find_one({"id": m["user_id"]}, {"_id": 0})
+        result.append({
+            "id": m["id"],
+            "user_id": m["user_id"],
+            "role": m["role"],
+            "joined_at": m["joined_at"],
+            "email": profile.get("email", "") if profile else "",
+            "full_name": profile.get("full_name", "") if profile else "",
+            "avatar_url": profile.get("avatar_url", "") if profile else "",
+        })
+    return result
+
+@api_router.delete("/startups/{startup_id}/members/{user_id}")
+async def remove_member(startup_id: str, user_id: str, user=Depends(get_current_user)):
+    requester = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not requester or requester["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can remove members")
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself")
+    await db.startup_members.delete_one({"startup_id": startup_id, "user_id": user_id})
+    return {"success": True}
+
+@api_router.get("/startups/{startup_id}/invite-code")
+async def get_invite_code(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can view invite code")
+    startup = await db.startups.find_one({"id": startup_id}, {"_id": 0})
+    return {"invite_code": startup.get("invite_code", "")}
+
+@api_router.post("/startups/{startup_id}/regenerate-invite")
+async def regenerate_invite(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can regenerate invite code")
+    new_code = str(uuid.uuid4())[:8].upper()
+    await db.startups.update_one({"id": startup_id}, {"$set": {"invite_code": new_code}})
+    return {"invite_code": new_code}
+
+# ==================== SUBSCRIPTION ROUTES (MOCK) ====================
+
+@api_router.get("/startups/{startup_id}/subscription")
+async def get_subscription(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    sub = await db.subscriptions.find_one({"startup_id": startup_id}, {"_id": 0})
+    if not sub:
+        sub = {
+            "id": str(uuid.uuid4()),
+            "startup_id": startup_id,
+            "plan": "free",
+            "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.subscriptions.insert_one(sub)
+        return {k: v for k, v in sub.items() if k != "_id"}
+    return sub
+
+@api_router.post("/startups/{startup_id}/subscription")
+async def update_subscription(startup_id: str, body: SubscriptionUpdate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can manage subscription")
+    existing = await db.subscriptions.find_one({"startup_id": startup_id})
+    if existing:
+        await db.subscriptions.update_one(
+            {"startup_id": startup_id},
+            {"$set": {"plan": body.plan, "status": "active", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    else:
+        sub = {
+            "id": str(uuid.uuid4()),
+            "startup_id": startup_id,
+            "plan": body.plan,
+            "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.subscriptions.insert_one(sub)
+    await db.startups.update_one({"id": startup_id}, {"$set": {"subscription_plan": body.plan}})
+    sub = await db.subscriptions.find_one({"startup_id": startup_id}, {"_id": 0})
+    return sub
+
+# ==================== APP SETUP ====================
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -77,12 +660,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+@app.on_event("startup")
+async def startup_event():
+    logger.info("StartupOps API starting up...")
+    await db.profiles.create_index("id", unique=True)
+    await db.startups.create_index("id", unique=True)
+    await db.startups.create_index("invite_code", unique=True)
+    await db.startup_members.create_index([("startup_id", 1), ("user_id", 1)])
+    await db.tasks.create_index("id", unique=True)
+    await db.tasks.create_index("startup_id")
+    await db.milestones.create_index("id", unique=True)
+    await db.milestones.create_index("startup_id")
+    await db.feedback.create_index("startup_id")
+    await db.subscriptions.create_index("startup_id")
+    logger.info("Database indexes created")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
