@@ -5,32 +5,53 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Users, Copy, RefreshCw, Trash2, Crown, UserPlus } from 'lucide-react';
+import { Users, Copy, RefreshCw, Trash2, Crown, UserPlus, Shield, User } from 'lucide-react';
 import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Role badge styling
+const roleBadgeStyles = {
+  founder: 'bg-primary/20 text-primary border-primary/30',
+  manager: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  member: 'bg-muted text-muted-foreground border-border',
+};
+
+const roleIcons = {
+  founder: Crown,
+  manager: Shield,
+  member: User,
+};
+
 export default function TeamPage() {
-  const { currentStartup, getAuthHeaders } = useAuth();
+  const { currentStartup, getAuthHeaders, permissions } = useAuth();
   const [members, setMembers] = useState([]);
   const [inviteCode, setInviteCode] = useState('');
-  const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const canManageTeam = permissions.canManageTeam;
 
   const fetchData = useCallback(async () => {
     if (!currentStartup) return;
     const headers = getAuthHeaders();
     try {
-      const [memRes, codeRes] = await Promise.all([
-        axios.get(`${API}/startups/${currentStartup.id}/members`, { headers }),
-        axios.get(`${API}/startups/${currentStartup.id}/invite-code`, { headers }).catch(() => ({ data: { invite_code: '' } })),
-      ]);
+      const memRes = await axios.get(`${API}/startups/${currentStartup.id}/members`, { headers });
       setMembers(memRes.data);
-      setInviteCode(codeRes.data.invite_code || '');
+      
+      // Only fetch invite code if founder
+      if (canManageTeam) {
+        try {
+          const codeRes = await axios.get(`${API}/startups/${currentStartup.id}/invite-code`, { headers });
+          setInviteCode(codeRes.data.invite_code || '');
+        } catch (e) {
+          setInviteCode('');
+        }
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [currentStartup, getAuthHeaders]);
+  }, [currentStartup, getAuthHeaders, canManageTeam]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -55,7 +76,13 @@ export default function TeamPage() {
     } catch (e) { toast.error(e.response?.data?.detail || 'Failed to remove'); }
   };
 
-  const isFounder = currentStartup?.user_role === 'founder';
+  const updateMemberRole = async (userId, newRole) => {
+    try {
+      await axios.put(`${API}/startups/${currentStartup.id}/members/${userId}/role`, { role: newRole }, { headers: getAuthHeaders() });
+      toast.success(`Role updated to ${newRole}`);
+      fetchData();
+    } catch (e) { toast.error(e.response?.data?.detail || 'Failed to update role'); }
+  };
 
   if (!currentStartup) return <div className="text-center py-20 text-muted-foreground">Select a startup first</div>;
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
@@ -67,8 +94,8 @@ export default function TeamPage() {
         <p className="text-sm text-muted-foreground">{members.length} members in {currentStartup.name}</p>
       </div>
 
-      {/* Invite Section */}
-      {isFounder && (
+      {/* Invite Section - Only for founders */}
+      {canManageTeam && (
         <Card className="glass-card border-primary/20">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2"><UserPlus className="h-5 w-5 text-primary" /> Invite Members</CardTitle>
@@ -100,6 +127,7 @@ export default function TeamPage() {
           <div className="space-y-3">
             {members.map(m => {
               const initials = (m.full_name || m.email || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+              const RoleIcon = roleIcons[m.role] || User;
               return (
                 <div key={m.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/30 group" data-testid={`member-${m.user_id}`}>
                   <div className="flex items-center gap-3">
@@ -109,20 +137,60 @@ export default function TeamPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{m.full_name || 'Unnamed'}</p>
-                        {m.role === 'founder' && <Crown className="h-4 w-4 text-primary" />}
-                        <Badge variant={m.role === 'founder' ? 'default' : 'secondary'} className="text-xs">{m.role}</Badge>
+                        <RoleIcon className={`h-4 w-4 ${m.role === 'founder' ? 'text-primary' : m.role === 'manager' ? 'text-blue-400' : 'text-muted-foreground'}`} />
+                        <Badge variant="outline" className={`text-xs capitalize ${roleBadgeStyles[m.role] || roleBadgeStyles.member}`}>
+                          {m.role}
+                        </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{m.email}</p>
                     </div>
                   </div>
-                  {isFounder && m.role !== 'founder' && (
-                    <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 text-destructive h-8 w-8" onClick={() => removeMember(m.user_id)} data-testid={`remove-member-${m.user_id}`}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  
+                  {/* Role management - Only for founders, can't change own role or other founders */}
+                  {canManageTeam && m.role !== 'founder' && (
+                    <div className="flex items-center gap-2">
+                      <Select value={m.role} onValueChange={(v) => updateMemberRole(m.user_id, v)}>
+                        <SelectTrigger className="w-28 h-8 text-xs" data-testid={`role-select-${m.user_id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manager">Manager</SelectItem>
+                          <SelectItem value="member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="opacity-0 group-hover:opacity-100 text-destructive h-8 w-8" 
+                        onClick={() => removeMember(m.user_id)} 
+                        data-testid={`remove-member-${m.user_id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               );
             })}
+          </div>
+          
+          {/* Role Legend */}
+          <div className="mt-6 pt-4 border-t border-border/40">
+            <p className="text-xs text-muted-foreground mb-2">Role Permissions:</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Crown className="h-3 w-3 text-primary" />
+                <span><strong>Founder:</strong> Full access</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Shield className="h-3 w-3 text-blue-400" />
+                <span><strong>Manager:</strong> Tasks, milestones, analytics</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <User className="h-3 w-3 text-muted-foreground" />
+                <span><strong>Member:</strong> View & update assigned tasks</span>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
