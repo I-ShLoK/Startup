@@ -4,29 +4,46 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { BarChart3, CheckCircle2, ClipboardList, Home, Lightbulb, LogOut, Menu, MessageSquare, Moon, Presentation, Rocket, Settings, Sun, Target, Users, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
-const navItems = [
-  { to: '/dashboard', icon: Home, label: 'Overview', end: true },
-  { to: '/dashboard/tasks', icon: ClipboardList, label: 'Tasks' },
-  { to: '/dashboard/milestones', icon: Target, label: 'Milestones' },
-  { to: '/dashboard/feedback', icon: MessageSquare, label: 'Feedback' },
-  { to: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/dashboard/ai-insights', icon: Lightbulb, label: 'AI Insights' },
-  { to: '/dashboard/pitch', icon: Presentation, label: 'Pitch Generator' },
-  { to: '/dashboard/team', icon: Users, label: 'Team' },
-  { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
+// Base nav items with permission requirements
+const allNavItems = [
+  { to: '/dashboard', icon: Home, label: 'Overview', end: true, requiresPermission: null },
+  { to: '/dashboard/tasks', icon: ClipboardList, label: 'Tasks', requiresPermission: null },
+  { to: '/dashboard/milestones', icon: Target, label: 'Milestones', requiresPermission: null },
+  { to: '/dashboard/feedback', icon: MessageSquare, label: 'Feedback', requiresPermission: null },
+  { to: '/dashboard/analytics', icon: BarChart3, label: 'Analytics', requiresPermission: 'canViewAnalytics' },
+  { to: '/dashboard/ai-insights', icon: Lightbulb, label: 'AI Insights', requiresPermission: 'canViewAnalytics' },
+  { to: '/dashboard/pitch', icon: Presentation, label: 'Pitch Generator', requiresPermission: 'canAccessPitch' },
+  { to: '/dashboard/team', icon: Users, label: 'Team', requiresPermission: null },
+  { to: '/dashboard/settings', icon: Settings, label: 'Settings', requiresPermission: null },
 ];
 
+// Role badge colors
+const roleBadgeColors = {
+  founder: 'bg-primary/20 text-primary border-primary/30',
+  manager: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  member: 'bg-muted text-muted-foreground border-border',
+};
+
 export default function DashboardLayout() {
-  const { profile, signOut, currentStartup, startups, selectStartup } = useAuth();
+  const { profile, signOut, currentStartup, startups, selectStartup, userRole, permissions } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const initials = (profile?.full_name || profile?.email || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  // Filter nav items based on user permissions
+  const navItems = useMemo(() => {
+    return allNavItems.filter(item => {
+      if (!item.requiresPermission) return true;
+      return permissions[item.requiresPermission];
+    });
+  }, [permissions]);
 
   const SidebarContent = () => (
     <>
@@ -46,6 +63,14 @@ export default function DashboardLayout() {
               ))}
             </SelectContent>
           </Select>
+        )}
+        {/* Role Badge */}
+        {userRole && (
+          <div className="mt-3 flex items-center justify-center">
+            <Badge variant="outline" className={`text-xs capitalize ${roleBadgeColors[userRole] || roleBadgeColors.member}`}>
+              {userRole}
+            </Badge>
+          </div>
         )}
       </div>
 
