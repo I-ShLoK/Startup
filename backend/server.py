@@ -109,11 +109,13 @@ async def get_current_user(request: Request):
     if not auth_header.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = auth_header.split(' ')[1]
+    if not token or token == 'undefined' or token == 'null':
+        raise HTTPException(status_code=401, detail="No valid token provided")
     try:
         user_response = supabase_client.auth.get_user(token)
         return user_response.user
     except Exception as e:
-        logger.error(f"Auth error: {e}")
+        logger.error(f"Auth error for token prefix {token[:20]}...: {type(e).__name__}: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 # ==================== HEALTH CHECK ====================
