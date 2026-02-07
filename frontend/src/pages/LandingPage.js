@@ -90,8 +90,8 @@ export default function LandingPage() {
               <Button size="lg" className="rounded-full text-base px-8 h-12" onClick={() => navigate('/auth')} data-testid="hero-cta-btn">
                 Start Building Free <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-              <Button size="lg" variant="outline" className="rounded-full text-base px-8 h-12" onClick={() => navigate('/pricing')} data-testid="hero-pricing-btn">
-                View Plans
+              <Button size="lg" variant="outline" className="rounded-full text-base px-8 h-12" onClick={handleDemoLogin} disabled={demoLoading} data-testid="hero-demo-btn">
+                {demoLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading...</> : <><Play className="mr-2 h-5 w-5" /> Try Demo</>}
               </Button>
             </div>
           </div>
