@@ -592,9 +592,11 @@ async def get_analytics(startup_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/ai/insights")
 async def get_ai_insights(body: AIInsightRequest, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_view_analytics(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can access AI insights")
     startup = await db.startups.find_one({"id": body.startup_id}, {"_id": 0})
     tasks = await db.tasks.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(100)
     milestones = await db.milestones.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
