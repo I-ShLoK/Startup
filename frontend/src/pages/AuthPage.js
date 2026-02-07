@@ -62,9 +62,7 @@ export default function AuthPage() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const siteUrl = process.env.REACT_APP_BACKEND_URL 
-      ? process.env.REACT_APP_BACKEND_URL.replace('/api', '')
-      : window.location.origin;
+    const siteUrl = process.env.REACT_APP_SITE_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${siteUrl}/auth/callback` },
