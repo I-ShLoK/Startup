@@ -17,6 +17,7 @@ import PitchGeneratorPage from "@/pages/PitchGeneratorPage";
 import TeamPage from "@/pages/TeamPage";
 import SettingsPage from "@/pages/SettingsPage";
 import PricingPage from "@/pages/PricingPage";
+import AuthCallbackPage from "@/pages/AuthCallbackPage";
 
 function ProtectedRoute({ children }) {
   const { user, loading, startups, startupsLoaded } = useAuth();
@@ -39,7 +40,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
-      <Route path="/auth/callback" element={<PublicRoute><AuthPage /></PublicRoute>} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
       <Route path="/pricing" element={<PricingPage />} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
