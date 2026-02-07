@@ -423,9 +423,11 @@ async def delete_task(task_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/startups/{startup_id}/milestones")
 async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can create milestones")
     milestone = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -441,7 +443,7 @@ async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(
 
 @api_router.get("/startups/{startup_id}/milestones")
 async def get_milestones(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
@@ -452,16 +454,18 @@ async def get_milestones(startup_id: str, user=Depends(get_current_user)):
         m["progress"] = int((done / total) * 100) if total > 0 else 0
         m["task_count"] = total
         m["tasks_done"] = done
-    return milestones
+    return {"milestones": milestones, "user_role": member.get("role", "member")}
 
 @api_router.put("/milestones/{milestone_id}")
 async def update_milestone(milestone_id: str, body: MilestoneUpdate, user=Depends(get_current_user)):
     milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can edit milestones")
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for field in ["title", "description", "target_date", "status"]:
         val = getattr(body, field, None)
@@ -476,9 +480,11 @@ async def delete_milestone(milestone_id: str, user=Depends(get_current_user)):
     milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
+    if not can_manage_content(member.get("role", "member")):
+        raise HTTPException(status_code=403, detail="Only founders and managers can delete milestones")
     await db.milestones.delete_one({"id": milestone_id})
     await db.tasks.update_many({"milestone_id": milestone_id}, {"$set": {"milestone_id": None}})
     return {"success": True}
