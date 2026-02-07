@@ -47,17 +47,23 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.target);
-    const { error } = await supabase.auth.signUp({
-      email: form.get('email'),
-      password: form.get('password'),
-      options: { data: { full_name: form.get('name') } },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Account created! Check your email for verification or continue.');
+    const email = form.get('email');
+    const password = form.get('password');
+    const fullName = form.get('name');
+    try {
+      // Create user via backend (auto-confirms email)
+      await axios.post(`${API}/auth/signup`, { email, password, full_name: fullName });
+      // Sign in immediately
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('Account created! Welcome to StartupOps.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create account');
     }
+    setLoading(false);
   };
 
   const handleGoogleLogin = async () => {
