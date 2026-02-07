@@ -102,6 +102,11 @@ class SubscriptionUpdate(BaseModel):
 class JoinStartupRequest(BaseModel):
     invite_code: str
 
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+
 # ==================== AUTH DEPENDENCY ====================
 
 async def get_current_user(request: Request):
