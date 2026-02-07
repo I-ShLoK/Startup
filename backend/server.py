@@ -112,15 +112,23 @@ class SignupRequest(BaseModel):
 async def get_current_user(request: Request):
     auth_header = request.headers.get('authorization', '')
     if not auth_header.startswith('Bearer '):
+        logger.warning("Missing or invalid Authorization header format")
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = auth_header.split(' ')[1]
     if not token or token == 'undefined' or token == 'null':
+        logger.warning(f"Invalid token value: {token[:20] if token else 'empty'}...")
         raise HTTPException(status_code=401, detail="No valid token provided")
     try:
         user_response = supabase_client.auth.get_user(token)
+        if not user_response or not user_response.user:
+            logger.error("Supabase returned no user for token")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        logger.info(f"User authenticated: {user_response.user.email}")
         return user_response.user
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Auth error for token prefix {token[:20]}...: {type(e).__name__}: {e}")
+        logger.error(f"Auth error for token prefix {token[:30]}...: {type(e).__name__}: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 # ==================== HEALTH CHECK ====================
