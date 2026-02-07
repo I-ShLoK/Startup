@@ -80,7 +80,7 @@ export default function AuthCallbackPage() {
         ) : (
           <>
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-            <p className="text-muted-foreground">Completing sign in...</p>
+            <p className="text-muted-foreground">{status}</p>
           </>
         )}
       </div>
