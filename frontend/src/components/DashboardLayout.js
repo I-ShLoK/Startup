@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { BarChart3, CheckCircle2, ClipboardList, Home, Lightbulb, LogOut, Menu, MessageSquare, Moon, Presentation, Rocket, Settings, Sun, Target, Users, X } from 'lucide-react';
+import { BarChart3, CheckCircle2, ClipboardList, Home, IndianRupee, Lightbulb, LogOut, Menu, MessageSquare, Moon, Presentation, Rocket, Settings, Sun, Target, Users, X, Briefcase } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 // Base nav items with permission requirements
@@ -15,9 +15,11 @@ const allNavItems = [
   { to: '/dashboard/tasks', icon: ClipboardList, label: 'Tasks', requiresPermission: null },
   { to: '/dashboard/milestones', icon: Target, label: 'Milestones', requiresPermission: null },
   { to: '/dashboard/feedback', icon: MessageSquare, label: 'Feedback', requiresPermission: null },
+  { to: '/dashboard/finance', icon: IndianRupee, label: 'Finance', requiresPermission: null },
   { to: '/dashboard/analytics', icon: BarChart3, label: 'Analytics', requiresPermission: 'canViewAnalytics' },
   { to: '/dashboard/ai-insights', icon: Lightbulb, label: 'AI Insights', requiresPermission: 'canViewAnalytics' },
   { to: '/dashboard/pitch', icon: Presentation, label: 'Pitch Generator', requiresPermission: 'canAccessPitch' },
+  { to: '/dashboard/investors', icon: Briefcase, label: 'Investors', requiresPermission: null },
   { to: '/dashboard/team', icon: Users, label: 'Team', requiresPermission: null },
   { to: '/dashboard/settings', icon: Settings, label: 'Settings', requiresPermission: null },
 ];
