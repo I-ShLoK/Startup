@@ -105,6 +105,33 @@ class MemberRoleUpdate(BaseModel):
 class TaskStatusUpdate(BaseModel):
     status: str
 
+# Finance Models
+class IncomeCreate(BaseModel):
+    title: str
+    amount: float
+    category: Optional[str] = "revenue"  # revenue, investment, grant, other
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
+class ExpenseCreate(BaseModel):
+    title: str
+    amount: float
+    category: Optional[str] = "operations"  # salary, marketing, operations, infrastructure, other
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
+class InvestmentCreate(BaseModel):
+    investor_name: str
+    amount: float
+    equity_percentage: Optional[float] = 0
+    investment_type: Optional[str] = "seed"  # pre-seed, seed, series-a, series-b, angel, other
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
+class InvestorInviteCreate(BaseModel):
+    email: str
+    name: str
+
 class JoinStartupRequest(BaseModel):
     invite_code: str
 
