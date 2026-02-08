@@ -87,9 +87,9 @@ export default function OnboardingPage() {
           <Card className="glass-card">
             <CardHeader className="text-center">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <Rocket className="h-7 w-7 text-primary" />
+                <Sparkles className="h-7 w-7 text-primary" />
               </div>
-              <CardTitle className="text-2xl font-['Plus_Jakarta_Sans']">Welcome to StartupOps</CardTitle>
+              <CardTitle className="text-2xl font-['Plus_Jakarta_Sans']">Welcome to Velora</CardTitle>
               <CardDescription>How would you like to get started?</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
