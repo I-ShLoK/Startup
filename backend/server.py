@@ -1343,7 +1343,7 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("StartupOps API starting up...")
+    logger.info("Velora API starting up...")
     try:
         await db.profiles.create_index("id", unique=True)
         await db.startups.create_index("id", unique=True)
