@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { BarChart3, CheckCircle2, ClipboardList, Home, IndianRupee, Lightbulb, LogOut, Menu, MessageSquare, Moon, Presentation, Rocket, Settings, Sun, Target, Users, X, Briefcase } from 'lucide-react';
+import { BarChart3, CheckCircle2, ClipboardList, Home, IndianRupee, Lightbulb, LogOut, Menu, MessageSquare, Moon, Presentation, Sparkles, Settings, Sun, Target, Users, X, Briefcase } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 // Base nav items with permission requirements
