@@ -30,6 +30,16 @@ export function AuthProvider({ children }) {
 
   const fetchProfile = useCallback(async (sess) => {
     try {
+     const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  process.env.REACT_APP_BACKEND_URL;
+
+if (!BACKEND_URL) {
+  console.error("❌ BACKEND URL NOT SET");
+}
+
+export const API = `${BACKEND_URL}/api`;
+
       const res = await axios.get(`${API}/auth/me`, {
         headers: { Authorization: `Bearer ${sess.access_token}` },
       });
