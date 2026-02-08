@@ -893,24 +893,33 @@ async def setup_demo():
 
 
 
+# CORS Configuration - Allow Vercel frontend and local development
 cors_origins_env = os.environ.get('CORS_ORIGINS', '*')
+default_origins = [
+    "https://startup-gamma-seven.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 if cors_origins_env == '*':
     cors_origins = ['*']
 else:
-    # Handle both with and without trailing slash
     cors_origins = []
     for origin in cors_origins_env.split(','):
         origin = origin.strip()
-        cors_origins.append(origin)
-        if origin.endswith('/'):
-            cors_origins.append(origin.rstrip('/'))
-        else:
-            cors_origins.append(origin + '/')
+        if origin:
+            cors_origins.append(origin)
+    # Also add defaults if not already present
+    for default in default_origins:
+        if default not in cors_origins:
+            cors_origins.append(default)
+
+logger.info(f"CORS origins configured: {cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=cors_origins,
+    allow_origins=cors_origins if cors_origins else ['*'],
     allow_methods=["*"],
     allow_headers=["*"],
 )
