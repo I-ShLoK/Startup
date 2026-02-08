@@ -347,7 +347,7 @@ async def delete_task(task_id: str, user=Depends(get_current_user)):
 
 # ==================== MILESTONE ROUTES ====================
 
-("/startups/{startup_id}/milestones")
+@api_router.post("/startups/{startup_id}/milestones")
 async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(get_current_user)):
     member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
