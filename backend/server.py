@@ -351,6 +351,35 @@ async def delete_task(task_id: str, user=Depends(get_current_user)):
     await db.tasks.delete_one({"id": task_id})
     return {"success": True}
 
+@api_router.patch("/tasks/{task_id}/status")
+async def update_task_status(task_id: str, body: TaskStatusUpdate, user=Depends(get_current_user)):
+    """Update only the status of a task - allows assigned members to update status"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    # Check if user is assigned to the task OR is founder/manager
+    is_assigned = task.get("assigned_to") == user.id
+    is_manager_or_founder = member["role"] in ["founder", "manager"]
+    
+    if not is_assigned and not is_manager_or_founder:
+        raise HTTPException(status_code=403, detail="You can only update status of tasks assigned to you")
+    
+    valid_statuses = ["todo", "in_progress", "review", "done"]
+    if body.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    await db.tasks.update_one(
+        {"id": task_id}, 
+        {"$set": {"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return updated
+
 # ==================== MILESTONE ROUTES ====================
 
 @api_router.post("/startups/{startup_id}/milestones")
