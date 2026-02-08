@@ -13,17 +13,17 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const plans = [
   {
-    name: 'Free', price: '$0', period: '/month', desc: 'Perfect for getting started',
+    name: 'Free', price: '₹0', period: '/month', desc: 'Perfect for getting started',
     features: ['1 Startup Workspace', 'Up to 5 team members', 'Task & Milestone tracking', 'Basic Analytics', 'Feedback collection'],
     cta: 'Current Plan', variant: 'outline',
   },
   {
-    name: 'Pro', price: '$19', period: '/month', desc: 'For growing teams', popular: true,
+    name: 'Pro', price: '₹499', period: '/month', desc: 'For growing teams', popular: true,
     features: ['Everything in Free', 'Unlimited team members', 'AI-powered Insights', 'Investor Pitch Generator', 'Advanced Analytics', 'Priority support'],
     cta: 'Upgrade to Pro', variant: 'default',
   },
   {
-    name: 'Scale', price: '$49', period: '/month', desc: 'For scaling startups',
+    name: 'Scale', price: '₹1,499', period: '/month', desc: 'For scaling startups',
     features: ['Everything in Pro', 'Multiple Startups', 'Custom analytics dashboards', 'API access', 'Dedicated account manager', 'White-label options'],
     cta: 'Upgrade to Scale', variant: 'outline',
   },
