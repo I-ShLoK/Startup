@@ -11,7 +11,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const insightTypes = [
   { key: 'general', label: 'General Insights', icon: Lightbulb, desc: 'Get overall analysis and actionable recommendations' },
-  { key: 'tasks', label: 'Task Suggestions', icon: Rocket, desc: 'Get AI-suggested tasks based on your startup stage' },
+  { key: 'tasks', label: 'Task Suggestions', icon: Sparkles, desc: 'Get AI-suggested tasks based on your startup stage' },
   { key: 'milestones', label: 'Milestone Ideas', icon: Target, desc: 'Discover key milestones you should be tracking' },
   { key: 'growth', label: 'Growth Strategy', icon: TrendingUp, desc: 'Get growth strategies tailored to your startup' },
 ];
