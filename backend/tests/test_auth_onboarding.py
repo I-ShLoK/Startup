@@ -11,7 +11,7 @@ import os
 import random
 import string
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://workspace-auth-fix.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://cheetah-team-deploy.preview.emergentagent.com').rstrip('/')
 
 # Import supabase for login
 from supabase import create_client
