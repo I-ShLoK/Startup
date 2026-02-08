@@ -89,7 +89,10 @@ export default function AuthPage() {
     setDemoLoading(true);
     try {
       // Setup demo data
-      await axios.post(`${API}/demo/setup`);
+      console.log('Setting up demo at:', `${API}/demo/setup`);
+      const setupResponse = await axios.post(`${API}/demo/setup`);
+      console.log('Demo setup response:', setupResponse.data);
+      
       // Sign in with demo credentials
       const { error } = await supabase.auth.signInWithPassword({
         email: 'demo@startupops.io',
@@ -101,8 +104,9 @@ export default function AuthPage() {
         toast.success('Welcome to the demo! Explore pre-populated data.');
       }
     } catch (e) {
-      toast.error('Failed to set up demo. Please try again.');
-      console.error(e);
+      console.error('Demo setup error:', e);
+      const errorMessage = e.response?.data?.detail || e.message || 'Unknown error';
+      toast.error('Failed to set up demo: ' + errorMessage);
     }
     setDemoLoading(false);
   };
