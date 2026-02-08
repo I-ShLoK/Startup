@@ -58,7 +58,7 @@ export default function AuthPage() {
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success('Account created! Welcome to StartupOps.');
+        toast.success('Account created! Welcome to Velora.');
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to create account');
