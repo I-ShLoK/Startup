@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { ArrowRight, BarChart3, CheckCircle2, Lightbulb, Loader2, LogOut, Moon, Play, Rocket, Sun, Target, Users } from 'lucide-react';
+import { ArrowRight, BarChart3, CheckCircle2, Lightbulb, Loader2, LogOut, Moon, Play, Sparkles, Sun, Target, Users } from 'lucide-react';
 import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
