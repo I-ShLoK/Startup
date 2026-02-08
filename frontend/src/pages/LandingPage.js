@@ -85,7 +85,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 relative">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6 fade-in">
-              <Rocket className="h-3.5 w-3.5" /> Built for early-stage founders
+              <Sparkles className="h-3.5 w-3.5" /> Built for early-stage founders
             </div>
             <h1 className="text-5xl md:text-6xl font-bold tracking-tight font-['Plus_Jakarta_Sans'] mb-6 fade-in stagger-1" data-testid="hero-heading">
               Your startup's<br />
