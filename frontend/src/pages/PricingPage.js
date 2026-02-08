@@ -51,8 +51,8 @@ export default function PricingPage() {
       <nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-border/40">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Rocket className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold font-['Plus_Jakarta_Sans']">StartupOps</span>
+            <Sparkles className="h-6 w-6 text-primary" />
+            <span className="text-xl font-bold font-['Plus_Jakarta_Sans']">Velora</span>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="pricing-theme-toggle">
