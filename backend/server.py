@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 # MongoDB setup (AFTER env is loaded)
 # ------------------------------------------------------------------
-MONGO_URL = os.environ.get("MONGO_URL")
-DB_NAME = os.environ.get("DB_NAME", "startupops")
+MONGO_URL = os.environ.get("MONGO_URL", "").strip()
+DB_NAME = os.environ.get("DB_NAME", "startupops").strip()
 
 logger.info(f"MongoDB URL loaded: {bool(MONGO_URL)}")
 
