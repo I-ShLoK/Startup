@@ -135,7 +135,7 @@ export default function LandingPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5" />
             <div className="relative">
               <h2 className="text-3xl md:text-4xl font-bold font-['Plus_Jakarta_Sans'] mb-4">Ready to scale your startup?</h2>
-              <p className="text-muted-foreground text-lg mb-8">Join founders who are building smarter with StartupOps. Free to start, scales with you.</p>
+              <p className="text-muted-foreground text-lg mb-8">Join founders who are building smarter with Velora. Free to start, scales with you.</p>
               <Button size="lg" className="rounded-full text-base px-8 h-12" onClick={() => navigate('/auth')} data-testid="cta-signup-btn">
                 Get Started Free <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
