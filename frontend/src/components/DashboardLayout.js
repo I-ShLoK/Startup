@@ -28,6 +28,7 @@ const allNavItems = [
 const roleBadgeColors = {
   founder: 'bg-primary/20 text-primary border-primary/30',
   manager: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  investor: 'bg-green-500/20 text-green-400 border-green-500/30',
   member: 'bg-muted text-muted-foreground border-border',
 };
 
