@@ -11,6 +11,8 @@ import DashboardOverview from "@/pages/DashboardOverview";
 import TasksPage from "@/pages/TasksPage";
 import MilestonesPage from "@/pages/MilestonesPage";
 import FeedbackPage from "@/pages/FeedbackPage";
+import FinanceDashboardPage from "@/pages/FinanceDashboardPage";
+import InvestorPortalPage from "@/pages/InvestorPortalPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import AIInsightsPage from "@/pages/AIInsightsPage";
 import PitchGeneratorPage from "@/pages/PitchGeneratorPage";
@@ -48,6 +50,8 @@ function AppRoutes() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="milestones" element={<MilestonesPage />} />
         <Route path="feedback" element={<FeedbackPage />} />
+        <Route path="finance" element={<FinanceDashboardPage />} />
+        <Route path="investors" element={<InvestorPortalPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="ai-insights" element={<AIInsightsPage />} />
         <Route path="pitch" element={<PitchGeneratorPage />} />
