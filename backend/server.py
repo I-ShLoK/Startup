@@ -772,6 +772,330 @@ async def update_subscription(startup_id: str, body: SubscriptionUpdate, user=De
     sub = await db.subscriptions.find_one({"startup_id": startup_id}, {"_id": 0})
     return sub
 
+# ==================== FINANCE ROUTES ====================
+
+@api_router.post("/startups/{startup_id}/finance/income")
+async def create_income(startup_id: str, body: IncomeCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] not in ["founder", "manager"]:
+        raise HTTPException(status_code=403, detail="Only founders and managers can add income")
+    income = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "title": body.title,
+        "amount": body.amount,
+        "category": body.category or "revenue",
+        "date": body.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "notes": body.notes or "",
+        "created_by": user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.income.insert_one(income)
+    return {k: v for k, v in income.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/finance/income")
+async def get_income(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    income = await db.income.find({"startup_id": startup_id}, {"_id": 0}).sort("date", -1).to_list(500)
+    return income
+
+@api_router.delete("/startups/{startup_id}/finance/income/{income_id}")
+async def delete_income(startup_id: str, income_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] not in ["founder", "manager"]:
+        raise HTTPException(status_code=403, detail="Only founders and managers can delete income")
+    await db.income.delete_one({"id": income_id, "startup_id": startup_id})
+    return {"success": True}
+
+@api_router.post("/startups/{startup_id}/finance/expenses")
+async def create_expense(startup_id: str, body: ExpenseCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] not in ["founder", "manager"]:
+        raise HTTPException(status_code=403, detail="Only founders and managers can add expenses")
+    expense = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "title": body.title,
+        "amount": body.amount,
+        "category": body.category or "operations",
+        "date": body.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "notes": body.notes or "",
+        "created_by": user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.expenses.insert_one(expense)
+    return {k: v for k, v in expense.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/finance/expenses")
+async def get_expenses(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    expenses = await db.expenses.find({"startup_id": startup_id}, {"_id": 0}).sort("date", -1).to_list(500)
+    return expenses
+
+@api_router.delete("/startups/{startup_id}/finance/expenses/{expense_id}")
+async def delete_expense(startup_id: str, expense_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] not in ["founder", "manager"]:
+        raise HTTPException(status_code=403, detail="Only founders and managers can delete expenses")
+    await db.expenses.delete_one({"id": expense_id, "startup_id": startup_id})
+    return {"success": True}
+
+@api_router.post("/startups/{startup_id}/finance/investments")
+async def create_investment(startup_id: str, body: InvestmentCreate, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can add investments")
+    investment = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "investor_name": body.investor_name,
+        "amount": body.amount,
+        "equity_percentage": body.equity_percentage or 0,
+        "investment_type": body.investment_type or "seed",
+        "date": body.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "notes": body.notes or "",
+        "created_by": user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.investments.insert_one(investment)
+    return {k: v for k, v in investment.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/finance/investments")
+async def get_investments(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    investments = await db.investments.find({"startup_id": startup_id}, {"_id": 0}).sort("date", -1).to_list(100)
+    return investments
+
+@api_router.delete("/startups/{startup_id}/finance/investments/{investment_id}")
+async def delete_investment(startup_id: str, investment_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can delete investments")
+    await db.investments.delete_one({"id": investment_id, "startup_id": startup_id})
+    return {"success": True}
+
+@api_router.get("/startups/{startup_id}/finance/summary")
+async def get_finance_summary(startup_id: str, user=Depends(get_current_user)):
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    income = await db.income.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    expenses = await db.expenses.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    investments = await db.investments.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+    
+    total_income = sum(i.get("amount", 0) for i in income)
+    total_expenses = sum(e.get("amount", 0) for e in expenses)
+    total_investments = sum(inv.get("amount", 0) for inv in investments)
+    total_equity_given = sum(inv.get("equity_percentage", 0) for inv in investments)
+    
+    # Monthly breakdown (last 6 months)
+    from collections import defaultdict
+    monthly_income = defaultdict(float)
+    monthly_expenses = defaultdict(float)
+    
+    for i in income:
+        month = i.get("date", "")[:7]  # YYYY-MM
+        if month:
+            monthly_income[month] += i.get("amount", 0)
+    
+    for e in expenses:
+        month = e.get("date", "")[:7]
+        if month:
+            monthly_expenses[month] += e.get("amount", 0)
+    
+    # Category breakdown
+    income_by_category = defaultdict(float)
+    expenses_by_category = defaultdict(float)
+    
+    for i in income:
+        income_by_category[i.get("category", "other")] += i.get("amount", 0)
+    
+    for e in expenses:
+        expenses_by_category[e.get("category", "other")] += e.get("amount", 0)
+    
+    return {
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "total_investments": total_investments,
+        "total_equity_given": total_equity_given,
+        "net_balance": total_income + total_investments - total_expenses,
+        "runway_months": round((total_income + total_investments - total_expenses) / max(total_expenses / max(len(set(e.get("date", "")[:7] for e in expenses)), 1), 1), 1) if total_expenses > 0 else 0,
+        "monthly_income": dict(monthly_income),
+        "monthly_expenses": dict(monthly_expenses),
+        "income_by_category": dict(income_by_category),
+        "expenses_by_category": dict(expenses_by_category),
+        "investment_count": len(investments),
+    }
+
+# ==================== INVESTOR ROUTES ====================
+
+@api_router.post("/startups/{startup_id}/investors/invite")
+async def invite_investor(startup_id: str, body: InvestorInviteCreate, user=Depends(get_current_user)):
+    """Founder invites an investor by email"""
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member or member["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can invite investors")
+    
+    # Create investor invite record
+    invite = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "email": body.email.lower(),
+        "name": body.name,
+        "invite_code": str(uuid.uuid4())[:8].upper(),
+        "status": "pending",
+        "created_by": user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.investor_invites.insert_one(invite)
+    return {k: v for k, v in invite.items() if k != "_id"}
+
+@api_router.get("/startups/{startup_id}/investors")
+async def get_investors(startup_id: str, user=Depends(get_current_user)):
+    """Get all investors for a startup"""
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    # Get investor members
+    investors = await db.startup_members.find({"startup_id": startup_id, "role": "investor"}, {"_id": 0}).to_list(100)
+    result = []
+    for inv in investors:
+        profile = await db.profiles.find_one({"id": inv["user_id"]}, {"_id": 0})
+        result.append({
+            "id": inv["id"],
+            "user_id": inv["user_id"],
+            "role": "investor",
+            "joined_at": inv.get("joined_at", ""),
+            "email": profile.get("email", "") if profile else "",
+            "full_name": profile.get("full_name", "") if profile else "",
+        })
+    
+    # Also get pending invites
+    pending = await db.investor_invites.find({"startup_id": startup_id, "status": "pending"}, {"_id": 0}).to_list(100)
+    
+    return {"investors": result, "pending_invites": pending}
+
+@api_router.post("/investors/join")
+async def join_as_investor(body: JoinStartupRequest, user=Depends(get_current_user)):
+    """Investor joins using invite code"""
+    invite = await db.investor_invites.find_one({"invite_code": body.invite_code.upper(), "status": "pending"})
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invalid or expired invite code")
+    
+    startup_id = invite["startup_id"]
+    
+    # Check if already a member
+    existing = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Already a member of this startup")
+    
+    # Add as investor member
+    membership = {
+        "id": str(uuid.uuid4()),
+        "startup_id": startup_id,
+        "user_id": user.id,
+        "role": "investor",
+        "joined_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.startup_members.insert_one(membership)
+    
+    # Update invite status
+    await db.investor_invites.update_one(
+        {"id": invite["id"]},
+        {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    startup = await db.startups.find_one({"id": startup_id}, {"_id": 0})
+    return {"message": "Joined as investor", "startup": startup}
+
+@api_router.delete("/startups/{startup_id}/investors/{user_id}")
+async def remove_investor(startup_id: str, user_id: str, user=Depends(get_current_user)):
+    """Remove an investor from startup"""
+    requester = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not requester or requester["role"] != "founder":
+        raise HTTPException(status_code=403, detail="Only founders can remove investors")
+    
+    await db.startup_members.delete_one({"startup_id": startup_id, "user_id": user_id, "role": "investor"})
+    return {"success": True}
+
+@api_router.get("/startups/{startup_id}/investor-view")
+async def get_investor_view(startup_id: str, user=Depends(get_current_user)):
+    """Special view for investors - shows financial summary and key metrics"""
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    # Get startup info
+    startup = await db.startups.find_one({"id": startup_id}, {"_id": 0})
+    
+    # Get financial data
+    income = await db.income.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    expenses = await db.expenses.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    investments = await db.investments.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
+    
+    total_income = sum(i.get("amount", 0) for i in income)
+    total_expenses = sum(e.get("amount", 0) for e in expenses)
+    total_investments = sum(inv.get("amount", 0) for inv in investments)
+    
+    # Get team size
+    members = await db.startup_members.find({"startup_id": startup_id}).to_list(100)
+    
+    # Get milestones progress
+    milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(50)
+    completed_milestones = len([m for m in milestones if m.get("status") == "completed"])
+    
+    # Get tasks progress
+    tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
+    completed_tasks = len([t for t in tasks if t.get("status") == "done"])
+    
+    # Monthly burn rate
+    from collections import defaultdict
+    monthly_expenses = defaultdict(float)
+    for e in expenses:
+        month = e.get("date", "")[:7]
+        if month:
+            monthly_expenses[month] += e.get("amount", 0)
+    
+    avg_monthly_burn = sum(monthly_expenses.values()) / max(len(monthly_expenses), 1) if monthly_expenses else 0
+    
+    # Runway calculation
+    current_balance = total_income + total_investments - total_expenses
+    runway_months = round(current_balance / avg_monthly_burn, 1) if avg_monthly_burn > 0 else 0
+    
+    return {
+        "startup": {
+            "name": startup.get("name", ""),
+            "industry": startup.get("industry", ""),
+            "stage": startup.get("stage", ""),
+            "description": startup.get("description", ""),
+        },
+        "financials": {
+            "total_income": total_income,
+            "total_expenses": total_expenses,
+            "total_investments": total_investments,
+            "current_balance": current_balance,
+            "avg_monthly_burn": round(avg_monthly_burn, 2),
+            "runway_months": runway_months,
+            "expenses_by_month": dict(sorted(monthly_expenses.items())[-6:]),  # Last 6 months
+        },
+        "metrics": {
+            "team_size": len(members),
+            "milestones_completed": completed_milestones,
+            "milestones_total": len(milestones),
+            "tasks_completed": completed_tasks,
+            "tasks_total": len(tasks),
+        },
+        "investments": investments,
+    }
+
 # ==================== DEMO MODE ====================
 
 DEMO_EMAIL = "demo@startupops.io"
