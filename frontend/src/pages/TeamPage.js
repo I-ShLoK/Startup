@@ -180,7 +180,7 @@ export default function TeamPage() {
           {/* Role Legend */}
           <div className="mt-6 pt-4 border-t border-border/40">
             <p className="text-xs text-muted-foreground mb-2">Role Permissions:</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <Crown className="h-3 w-3 text-primary" />
                 <span><strong>Founder:</strong> Full access</span>
@@ -188,6 +188,10 @@ export default function TeamPage() {
               <div className="flex items-center gap-2">
                 <Shield className="h-3 w-3 text-blue-400" />
                 <span><strong>Manager:</strong> Tasks, milestones, analytics</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-3 w-3 text-green-400" />
+                <span><strong>Investor:</strong> View financials & metrics</span>
               </div>
               <div className="flex items-center gap-2">
                 <User className="h-3 w-3 text-muted-foreground" />
