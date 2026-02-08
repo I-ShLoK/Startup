@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Users, Copy, RefreshCw, Trash2, Crown, UserPlus, Shield, User } from 'lucide-react';
+import { Users, Copy, RefreshCw, Trash2, Crown, UserPlus, Shield, User, Briefcase } from 'lucide-react';
 import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -16,12 +16,14 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const roleBadgeStyles = {
   founder: 'bg-primary/20 text-primary border-primary/30',
   manager: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  investor: 'bg-green-500/20 text-green-400 border-green-500/30',
   member: 'bg-muted text-muted-foreground border-border',
 };
 
 const roleIcons = {
   founder: Crown,
   manager: Shield,
+  investor: Briefcase,
   member: User,
 };
 
