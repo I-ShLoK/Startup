@@ -354,8 +354,10 @@ async def delete_task(task_id: str, user=Depends(get_current_user)):
 @api_router.patch("/tasks/{task_id}/status")
 async def update_task_status(task_id: str, body: TaskStatusUpdate, user=Depends(get_current_user)):
     """Update only the status of a task - allows assigned members to update status"""
+    logger.info(f"Updating task status: task_id={task_id}, new_status={body.status}, user_id={user.id}")
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
+        logger.error(f"Task not found: task_id={task_id}")
         raise HTTPException(status_code=404, detail="Task not found")
     
     member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
@@ -378,6 +380,7 @@ async def update_task_status(task_id: str, body: TaskStatusUpdate, user=Depends(
         {"$set": {"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    logger.info(f"Task status updated successfully: task_id={task_id}")
     return updated
 
 # ==================== MILESTONE ROUTES ====================
