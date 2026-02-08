@@ -168,7 +168,7 @@ async def get_current_user(request: Request):
 
 @api_router.get("/")
 async def root():
-    return {"message": "StartupOps API is running"}
+    return {"message": "Velora API is running"}
 
 # ==================== AUTH ROUTES ====================
 
