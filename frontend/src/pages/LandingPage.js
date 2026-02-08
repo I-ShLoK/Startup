@@ -46,7 +46,7 @@ export default function LandingPage() {
     { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for founders and team members with real-time workspace.' },
     { icon: Lightbulb, title: 'Feedback & Validation', desc: 'Collect structured feedback, validate ideas with metrics and qualitative inputs.' },
     { icon: BarChart3, title: 'Analytics Dashboard', desc: 'Progress indicators, completion trends, and meaningful data representation.' },
-    { icon: Rocket, title: 'AI-Powered Insights', desc: 'Smart suggestions for tasks, milestones, and growth strategies using Gemini AI.' },
+    { icon: Sparkles, title: 'AI-Powered Insights', desc: 'Smart suggestions for tasks, milestones, and growth strategies using Gemini AI.' },
     { icon: CheckCircle2, title: 'Investor Pitch Generator', desc: 'Auto-generate compelling pitch outlines using your startup data and traction.' },
   ];
 
