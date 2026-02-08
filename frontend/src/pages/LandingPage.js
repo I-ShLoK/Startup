@@ -143,7 +143,7 @@ export default function LandingPage() {
             <Rocket className="h-4 w-4 text-primary" />
             <span className="font-semibold">StartupOps</span>
           </div>
-          <p>Techpreneur - IIT Jammu Udyamotsav '26</p>
+          <p>Team Hungry Cheetah</p>
         </div>
       </footer>
     </div>
