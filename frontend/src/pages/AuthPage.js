@@ -21,7 +21,7 @@ export default function AuthPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
-        toast.success('Welcome to StartupOps!');
+        toast.success('Welcome to Velora!');
       }
     });
     return () => subscription.unsubscribe();
