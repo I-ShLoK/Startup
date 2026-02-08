@@ -574,14 +574,14 @@ Generate a structured pitch with these sections:
 Make it compelling, data-driven where possible, and suitable for a 5-minute pitch."""
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=GEMINI_API_KEY,
-            session_id=f"pitch-{body.startup_id}-{str(uuid.uuid4())[:8]}",
-            system_message="You are an expert startup pitch consultant. Create compelling, professional investor pitch outlines. Use markdown formatting with clear sections."
-        ).with_model("gemini", "gemini-2.5-flash")
-        response = await chat.send_message(UserMessage(text=prompt))
-        return {"pitch": response, "startup_name": startup.get("name", "")}
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction="You are an expert startup pitch consultant. Create compelling, professional investor pitch outlines. Use markdown formatting with clear sections."
+        )
+        response = model.generate_content(prompt)
+        return {"pitch": response.text, "startup_name": startup.get("name", "")}
     except Exception as e:
         logger.error(f"Pitch generation error: {e}")
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
