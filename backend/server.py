@@ -658,12 +658,15 @@ async def remove_member(startup_id: str, user_id: str, user=Depends(get_current_
 
 @api_router.put("/startups/{startup_id}/members/{user_id}/role")
 async def update_member_role(startup_id: str, user_id: str, body: MemberRoleUpdate, user=Depends(get_current_user)):
+    logger.info(f"Updating member role: startup_id={startup_id}, target_user_id={user_id}, new_role={body.role}, requester_id={user.id}")
     requester = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
     if not requester or requester["role"] != "founder":
         raise HTTPException(status_code=403, detail="Only founders can change roles")
     
     target_member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user_id}, {"_id": 0})
+    logger.info(f"Target member lookup result: {target_member}")
     if not target_member:
+        logger.error(f"Member not found: startup_id={startup_id}, user_id={user_id}")
         raise HTTPException(status_code=404, detail="Member not found")
     
     if target_member["role"] == "founder":
@@ -676,6 +679,7 @@ async def update_member_role(startup_id: str, user_id: str, body: MemberRoleUpda
         {"startup_id": startup_id, "user_id": user_id},
         {"$set": {"role": body.role}}
     )
+    logger.info(f"Member role updated successfully: user_id={user_id}, new_role={body.role}")
     return {"success": True, "role": body.role}
 
 @api_router.get("/startups/{startup_id}/invite-code")
