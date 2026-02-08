@@ -52,8 +52,8 @@ export default function DashboardLayout() {
     <>
       <div className="p-4 border-b border-border/40">
         <div className="flex items-center gap-2 mb-4">
-          <Rocket className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold font-['Plus_Jakarta_Sans']">StartupOps</span>
+          <Sparkles className="h-6 w-6 text-primary" />
+          <span className="text-lg font-bold font-['Plus_Jakarta_Sans']">Velora</span>
         </div>
         {startups.length > 0 && (
           <Select value={currentStartup?.id || ''} onValueChange={(v) => { const s = startups.find(st => st.id === v); if (s) selectStartup(s); }}>
