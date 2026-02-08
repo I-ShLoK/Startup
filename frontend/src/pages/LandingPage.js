@@ -65,7 +65,10 @@ export default function LandingPage() {
             </Button>
             <Button variant="ghost" onClick={() => navigate('/pricing')} data-testid="nav-pricing-btn">Pricing</Button>
             {user ? (
-              <Button onClick={() => navigate('/dashboard')} className="rounded-full" data-testid="nav-dashboard-btn">Dashboard <ArrowRight className="ml-1 h-4 w-4" /></Button>
+              <>
+                <Button onClick={() => navigate('/dashboard')} className="rounded-full" data-testid="nav-dashboard-btn">Dashboard <ArrowRight className="ml-1 h-4 w-4" /></Button>
+                <Button variant="outline" onClick={handleLogout} className="rounded-full" data-testid="nav-logout-btn"><LogOut className="mr-1 h-4 w-4" /> Logout</Button>
+              </>
             ) : (
               <>
                 <Button variant="ghost" onClick={() => navigate('/auth')} data-testid="nav-login-btn">Log in</Button>
