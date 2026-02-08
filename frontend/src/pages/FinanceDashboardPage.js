@@ -83,8 +83,9 @@ export default function FinanceDashboardPage() {
       setExpenses(expensesRes.data);
       setInvestments(investmentsRes.data);
     } catch (e) {
-      console.error(e);
-      toast.error('Failed to load financial data');
+      console.error('Finance data error:', e);
+      const errorMsg = e.response?.data?.detail || e.message || 'Unknown error';
+      toast.error(`Failed to load financial data: ${errorMsg}`);
     }
     setLoading(false);
   }, [currentStartup, getAuthHeaders]);
