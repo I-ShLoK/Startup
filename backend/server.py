@@ -520,14 +520,14 @@ async def get_ai_insights(body: AIInsightRequest, user=Depends(get_current_user)
     prompt = prompt_map.get(body.prompt_type, prompt_map["general"])
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=GEMINI_API_KEY,
-            session_id=f"insights-{body.startup_id}-{str(uuid.uuid4())[:8]}",
-            system_message="You are a startup advisor AI. Provide concise, actionable insights for early-stage founders. Format your response with clear sections using markdown. Be specific and practical."
-        ).with_model("gemini", "gemini-2.5-flash")
-        response = await chat.send_message(UserMessage(text=prompt))
-        return {"insights": response, "prompt_type": body.prompt_type}
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction="You are a startup advisor AI. Provide concise, actionable insights for early-stage founders. Format your response with clear sections using markdown. Be specific and practical."
+        )
+        response = model.generate_content(prompt)
+        return {"insights": response.text, "prompt_type": body.prompt_type}
     except Exception as e:
         logger.error(f"AI insights error: {e}")
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
