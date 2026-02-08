@@ -149,8 +149,8 @@ export default function DashboardLayout() {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2">
-            <Rocket className="h-5 w-5 text-primary" />
-            <span className="font-bold">StartupOps</span>
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span className="font-bold">Velora</span>
           </div>
           <Button variant="ghost" size="icon" onClick={toggleTheme}>
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
