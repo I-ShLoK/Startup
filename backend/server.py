@@ -99,6 +99,12 @@ class PitchRequest(BaseModel):
 class SubscriptionUpdate(BaseModel):
     plan: str
 
+class MemberRoleUpdate(BaseModel):
+    role: str
+
+class TaskStatusUpdate(BaseModel):
+    status: str
+
 class JoinStartupRequest(BaseModel):
     invite_code: str
 
