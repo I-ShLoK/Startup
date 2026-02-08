@@ -893,10 +893,24 @@ async def setup_demo():
 
 
 
+cors_origins_env = os.environ.get('CORS_ORIGINS', '*')
+if cors_origins_env == '*':
+    cors_origins = ['*']
+else:
+    # Handle both with and without trailing slash
+    cors_origins = []
+    for origin in cors_origins_env.split(','):
+        origin = origin.strip()
+        cors_origins.append(origin)
+        if origin.endswith('/'):
+            cors_origins.append(origin.rstrip('/'))
+        else:
+            cors_origins.append(origin + '/')
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
