@@ -26,7 +26,7 @@ export default function LandingPage() {
     try {
       await axios.post(`${API}/demo/setup`);
       const { error } = await supabase.auth.signInWithPassword({
-        email: 'demo@startupops.io',
+        email: 'demo@velora.io',
         password: 'DemoUser2026!',
       });
       if (error) {
