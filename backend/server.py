@@ -1,8 +1,6 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
 import logging
 import uuid
 import httpx
@@ -11,28 +9,114 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone
 from supabase import create_client, Client
+import os
+from motor.motor_asyncio import AsyncIOMotorClient
 
+# ------------------------------------------------------------------
+# Load environment variables FIRST
+# ------------------------------------------------------------------
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# ------------------------------------------------------------------
+# Logging setup
+# ------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# Supabase client for auth verification
-supabase_url = os.environ.get('SUPABASE_URL')
-supabase_service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-supabase_client: Client = create_client(supabase_url, supabase_service_key)
+# ------------------------------------------------------------------
+# MongoDB setup (AFTER env is loaded)
+# ------------------------------------------------------------------
+MONGO_URL = os.environ.get("MONGO_URL")
+DB_NAME = os.environ.get("DB_NAME", "startupops")
 
-# Gemini API key
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+logger.info(f"MongoDB URL loaded: {bool(MONGO_URL)}")
 
-app = FastAPI()
+if not MONGO_URL:
+    raise RuntimeError("MONGO_URL environment variable is NOT set")
+
+if not MONGO_URL.startswith("mongodb://") and not MONGO_URL.startswith("mongodb+srv://"):
+    raise RuntimeError(f"Invalid MONGO_URL value: {MONGO_URL}")
+
+client = AsyncIOMotorClient(
+    MONGO_URL,
+    tls=True,
+    tlsAllowInvalidCertificates=False
+)
+
+db = client[DB_NAME]
+
+# ------------------------------------------------------------------
+# Supabase client (server-side)
+# ------------------------------------------------------------------
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+if not supabase_url or not supabase_service_key:
+    raise RuntimeError("Supabase environment variables are missing")
+
+supabase_client: Client = create_client(
+    supabase_url,
+    supabase_service_key
+)
+
+# ------------------------------------------------------------------
+# Gemini API
+# ------------------------------------------------------------------
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    logger.warning("GEMINI_API_KEY not set – AI features will be disabled")
+
+# ------------------------------------------------------------------
+# FastAPI app
+# ------------------------------------------------------------------
+app = FastAPI(title="StartupOps API")
 api_router = APIRouter(prefix="/api")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# ------------------------------------------------------------------
+# CORS (example – adjust origins)
+# ------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ------------------------------------------------------------------
+# Startup event (NON-FATAL index creation)
+# ------------------------------------------------------------------
+@app.on_event("startup")
+async def startup_event():
+    try:
+        await db.profiles.create_index("id", unique=True)
+        await db.startups.create_index("id", unique=True)
+        await db.startups.create_index("invite_code", unique=True)
+        await db.startup_members.create_index(
+            [("startup_id", 1), ("user_id", 1)],
+            unique=True
+        )
+        logger.info("MongoDB indexes ensured")
+    except Exception as e:
+        logger.error(f"MongoDB index creation skipped: {e}")
+
+# ------------------------------------------------------------------
+# Health check (VERY IMPORTANT for Render)
+# ------------------------------------------------------------------
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+# ------------------------------------------------------------------
+# Include routers
+# ------------------------------------------------------------------
+app.include_router(api_router)
+
 
 # ==================== PYDANTIC MODELS ====================
 
