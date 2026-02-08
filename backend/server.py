@@ -1098,7 +1098,7 @@ async def get_investor_view(startup_id: str, user=Depends(get_current_user)):
 
 # ==================== DEMO MODE ====================
 
-DEMO_EMAIL = "demo@startupops.io"
+DEMO_EMAIL = "demo@velora.io"
 DEMO_PASSWORD = "DemoUser2026!"
 
 @api_router.post("/demo/setup")
