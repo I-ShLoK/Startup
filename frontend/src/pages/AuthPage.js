@@ -122,8 +122,8 @@ export default function AuthPage() {
         <Card className="glass-card border-border/50">
           <CardHeader className="text-center pb-2">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Rocket className="h-7 w-7 text-primary" />
-              <span className="text-2xl font-bold font-['Plus_Jakarta_Sans']">StartupOps</span>
+              <Sparkles className="h-7 w-7 text-primary" />
+              <span className="text-2xl font-bold font-['Plus_Jakarta_Sans']">Velora</span>
             </div>
             <CardDescription>Manage your startup execution journey</CardDescription>
           </CardHeader>
