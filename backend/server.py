@@ -699,8 +699,8 @@ async def update_member_role(startup_id: str, user_id: str, body: MemberRoleUpda
     if target_member["role"] == "founder":
         raise HTTPException(status_code=400, detail="Cannot change founder role")
     
-    if body.role not in ["manager", "member"]:
-        raise HTTPException(status_code=400, detail="Invalid role. Must be 'manager' or 'member'")
+    if body.role not in ["manager", "member", "investor"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'manager', 'member', or 'investor'")
     
     await db.startup_members.update_one(
         {"startup_id": startup_id, "user_id": user_id},
