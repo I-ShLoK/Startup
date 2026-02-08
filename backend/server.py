@@ -906,17 +906,21 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("StartupOps API starting up...")
-    await db.profiles.create_index("id", unique=True)
-    await db.startups.create_index("id", unique=True)
-    await db.startups.create_index("invite_code", unique=True)
-    await db.startup_members.create_index([("startup_id", 1), ("user_id", 1)])
-    await db.tasks.create_index("id", unique=True)
-    await db.tasks.create_index("startup_id")
-    await db.milestones.create_index("id", unique=True)
-    await db.milestones.create_index("startup_id")
-    await db.feedback.create_index("startup_id")
-    await db.subscriptions.create_index("startup_id")
-    logger.info("Database indexes created")
+    try:
+        await db.profiles.create_index("id", unique=True)
+        await db.startups.create_index("id", unique=True)
+        await db.startups.create_index("invite_code", unique=True)
+        await db.startup_members.create_index([("startup_id", 1), ("user_id", 1)], unique=True)
+        await db.tasks.create_index("id", unique=True)
+        await db.tasks.create_index("startup_id")
+        await db.milestones.create_index("id", unique=True)
+        await db.milestones.create_index("startup_id")
+        await db.feedback.create_index("startup_id")
+        await db.subscriptions.create_index("startup_id")
+        logger.info("Database indexes created")
+    except Exception as e:
+        # Indexes may already exist, log and continue
+        logger.warning(f"Index creation warning (may already exist): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
