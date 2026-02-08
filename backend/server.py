@@ -1,6 +1,8 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+import os
 import logging
 import uuid
 import httpx
@@ -9,118 +11,28 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone
 from supabase import create_client, Client
-import os
-from motor.motor_asyncio import AsyncIOMotorClient
 
-# ------------------------------------------------------------------
-# Load environment variables FIRST
-# ------------------------------------------------------------------
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / '.env')
 
-# ------------------------------------------------------------------
-# Logging setup
-# ------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# MongoDB connection
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
 
-# ------------------------------------------------------------------
-# MongoDB setup (AFTER env is loaded)
-# ------------------------------------------------------------------
-MONGO_URL = os.environ.get("MONGO_URL", "").strip()
-DB_NAME = os.environ.get("DB_NAME", "startupops").strip()
+# Supabase client for auth verification
+supabase_url = os.environ.get('SUPABASE_URL')
+supabase_service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+supabase_client: Client = create_client(supabase_url, supabase_service_key)
 
-logger.info(f"MongoDB URL loaded: {bool(MONGO_URL)}")
+# Gemini API key
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-if not MONGO_URL:
-    raise RuntimeError("MONGO_URL environment variable is NOT set")
-
-if not MONGO_URL.startswith("mongodb://") and not MONGO_URL.startswith("mongodb+srv://"):
-    raise RuntimeError(f"Invalid MONGO_URL value: {MONGO_URL}")
-
-client = AsyncIOMotorClient(
-    MONGO_URL,
-    tls=True,
-    tlsAllowInvalidCertificates=False
-)
-
-db = client[DB_NAME]
-
-# ------------------------------------------------------------------
-# Supabase client (server-side)
-# ------------------------------------------------------------------
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-
-if not supabase_url or not supabase_service_key:
-    raise RuntimeError("Supabase environment variables are missing")
-
-supabase_client: Client = create_client(
-    supabase_url,
-    supabase_service_key
-)
-
-# ------------------------------------------------------------------
-# Gemini API
-# ------------------------------------------------------------------
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY not set – AI features will be disabled")
-
-# ------------------------------------------------------------------
-# FastAPI app
-# ------------------------------------------------------------------
-app = FastAPI(title="StartupOps API")
+app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# ------------------------------------------------------------------
-# CORS (example – adjust origins)
-# ------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://startup-gamma-seven.vercel.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ------------------------------------------------------------------
-# Startup event (NON-FATAL index creation)
-# ------------------------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    try:
-        await db.profiles.create_index("id", unique=True)
-        await db.startups.create_index("id", unique=True)
-        await db.startups.create_index("invite_code", unique=True)
-        await db.startup_members.create_index(
-            [("startup_id", 1), ("user_id", 1)],
-            unique=True
-        )
-        logger.info("MongoDB indexes ensured")
-    except Exception as e:
-        logger.error(f"MongoDB index creation skipped: {e}")
-
-# ------------------------------------------------------------------
-# Health check (VERY IMPORTANT for Render)
-# ------------------------------------------------------------------
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-# ------------------------------------------------------------------
-# Include routers
-# ------------------------------------------------------------------
-app.include_router(api_router)
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ==================== PYDANTIC MODELS ====================
 
@@ -194,38 +106,6 @@ class SignupRequest(BaseModel):
     email: str
     password: str
     full_name: Optional[str] = None
-
-class RoleUpdate(BaseModel):
-    role: str  # founder, manager, member
-
-class TaskStatusUpdate(BaseModel):
-    status: str  # todo, in_progress, review, done
-
-# ==================== ROLE-BASED PERMISSIONS ====================
-
-# Role hierarchy: founder > manager > member
-ROLE_HIERARCHY = {"founder": 3, "manager": 2, "member": 1}
-VALID_ROLES = ["founder", "manager", "member"]
-
-def can_manage_content(role: str) -> bool:
-    """Check if role can create/edit/delete tasks, milestones, feedback"""
-    return role in ["founder", "manager"]
-
-def can_view_analytics(role: str) -> bool:
-    """Check if role can view analytics and AI insights"""
-    return role in ["founder", "manager"]
-
-def can_access_pitch(role: str) -> bool:
-    """Check if role can access pitch generator"""
-    return role == "founder"
-
-def can_manage_team(role: str) -> bool:
-    """Check if role can view invite code, remove members, change roles"""
-    return role == "founder"
-
-def can_manage_startup(role: str) -> bool:
-    """Check if role can edit startup settings and subscription"""
-    return role == "founder"
 
 # ==================== AUTH DEPENDENCY ====================
 
@@ -409,11 +289,9 @@ async def join_startup(body: JoinStartupRequest, user=Depends(get_current_user))
 
 @api_router.post("/startups/{startup_id}/tasks")
 async def create_task(startup_id: str, body: TaskCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can create tasks")
     task = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -433,35 +311,20 @@ async def create_task(startup_id: str, body: TaskCreate, user=Depends(get_curren
 
 @api_router.get("/startups/{startup_id}/tasks")
 async def get_tasks(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(1000)
-    # Add user_role to response for frontend permission checking
-    return {"tasks": tasks, "user_role": member.get("role", "member")}
+    return tasks
 
 @api_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskUpdate, user=Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    
-    role = member.get("role", "member")
-    
-    # Members can only update status of tasks assigned to them
-    if role == "member":
-        is_assigned_to_user = task.get("assigned_to") == user.id
-        is_only_status_update = body.status is not None and all(
-            getattr(body, f, None) is None for f in ["title", "description", "priority", "assigned_to", "milestone_id", "due_date"]
-        )
-        if not is_assigned_to_user:
-            raise HTTPException(status_code=403, detail="Members can only update tasks assigned to them")
-        if not is_only_status_update:
-            raise HTTPException(status_code=403, detail="Members can only change task status")
-    
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for field in ["title", "description", "status", "priority", "assigned_to", "milestone_id", "due_date"]:
         val = getattr(body, field, None)
@@ -471,51 +334,24 @@ async def update_task(task_id: str, body: TaskUpdate, user=Depends(get_current_u
     updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return updated
 
-# New endpoint for members to only update task status
-@api_router.patch("/tasks/{task_id}/status")
-async def update_task_status(task_id: str, body: TaskStatusUpdate, user=Depends(get_current_user)):
-    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
-    if not member:
-        raise HTTPException(status_code=403, detail="Not a member")
-    
-    role = member.get("role", "member")
-    
-    # Members can only update status of tasks assigned to them
-    if role == "member" and task.get("assigned_to") != user.id:
-        raise HTTPException(status_code=403, detail="Members can only update tasks assigned to them")
-    
-    if body.status not in ["todo", "in_progress", "review", "done"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
-    
-    await db.tasks.update_one({"id": task_id}, {"$set": {"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    return updated
-
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, user=Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": task["startup_id"], "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can delete tasks")
     await db.tasks.delete_one({"id": task_id})
     return {"success": True}
 
 # ==================== MILESTONE ROUTES ====================
 
-@api_router.post("/startups/{startup_id}/milestones")
+("/startups/{startup_id}/milestones")
 async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can create milestones")
     milestone = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -531,7 +367,7 @@ async def create_milestone(startup_id: str, body: MilestoneCreate, user=Depends(
 
 @api_router.get("/startups/{startup_id}/milestones")
 async def get_milestones(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
@@ -542,18 +378,16 @@ async def get_milestones(startup_id: str, user=Depends(get_current_user)):
         m["progress"] = int((done / total) * 100) if total > 0 else 0
         m["task_count"] = total
         m["tasks_done"] = done
-    return {"milestones": milestones, "user_role": member.get("role", "member")}
+    return milestones
 
 @api_router.put("/milestones/{milestone_id}")
 async def update_milestone(milestone_id: str, body: MilestoneUpdate, user=Depends(get_current_user)):
     milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can edit milestones")
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for field in ["title", "description", "target_date", "status"]:
         val = getattr(body, field, None)
@@ -568,11 +402,9 @@ async def delete_milestone(milestone_id: str, user=Depends(get_current_user)):
     milestone = await db.milestones.find_one({"id": milestone_id}, {"_id": 0})
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": milestone["startup_id"], "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can delete milestones")
     await db.milestones.delete_one({"id": milestone_id})
     await db.tasks.update_many({"milestone_id": milestone_id}, {"$set": {"milestone_id": None}})
     return {"success": True}
@@ -581,10 +413,9 @@ async def delete_milestone(milestone_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/startups/{startup_id}/feedback")
 async def create_feedback(startup_id: str, body: FeedbackCreate, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    # All roles can submit feedback
     feedback = {
         "id": str(uuid.uuid4()),
         "startup_id": startup_id,
@@ -601,34 +432,19 @@ async def create_feedback(startup_id: str, body: FeedbackCreate, user=Depends(ge
 
 @api_router.get("/startups/{startup_id}/feedback")
 async def get_feedback(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
     feedbacks = await db.feedback.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
-    return {"feedbacks": feedbacks, "user_role": member.get("role", "member")}
-
-@api_router.delete("/feedback/{feedback_id}")
-async def delete_feedback(feedback_id: str, user=Depends(get_current_user)):
-    feedback = await db.feedback.find_one({"id": feedback_id}, {"_id": 0})
-    if not feedback:
-        raise HTTPException(status_code=404, detail="Feedback not found")
-    member = await db.startup_members.find_one({"startup_id": feedback["startup_id"], "user_id": user.id}, {"_id": 0})
-    if not member:
-        raise HTTPException(status_code=403, detail="Not a member")
-    if not can_manage_content(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can delete feedback")
-    await db.feedback.delete_one({"id": feedback_id})
-    return {"success": True}
+    return feedbacks
 
 # ==================== ANALYTICS ROUTES ====================
 
 @api_router.get("/startups/{startup_id}/analytics")
 async def get_analytics(startup_id: str, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_view_analytics(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can view analytics")
     tasks = await db.tasks.find({"startup_id": startup_id}, {"_id": 0}).to_list(1000)
     milestones = await db.milestones.find({"startup_id": startup_id}, {"_id": 0}).to_list(100)
     feedbacks = await db.feedback.find({"startup_id": startup_id}, {"_id": 0}).to_list(500)
@@ -680,11 +496,9 @@ async def get_analytics(startup_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/ai/insights")
 async def get_ai_insights(body: AIInsightRequest, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_view_analytics(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders and managers can access AI insights")
     startup = await db.startups.find_one({"id": body.startup_id}, {"_id": 0})
     tasks = await db.tasks.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(100)
     milestones = await db.milestones.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
@@ -720,11 +534,9 @@ async def get_ai_insights(body: AIInsightRequest, user=Depends(get_current_user)
 
 @api_router.post("/ai/pitch")
 async def generate_pitch(body: PitchRequest, user=Depends(get_current_user)):
-    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id}, {"_id": 0})
+    member = await db.startup_members.find_one({"startup_id": body.startup_id, "user_id": user.id})
     if not member:
         raise HTTPException(status_code=403, detail="Not a member")
-    if not can_access_pitch(member.get("role", "member")):
-        raise HTTPException(status_code=403, detail="Only founders can access the pitch generator")
     startup = await db.startups.find_one({"id": body.startup_id}, {"_id": 0})
     tasks = await db.tasks.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(100)
     milestones = await db.milestones.find({"startup_id": body.startup_id}, {"_id": 0}).to_list(50)
@@ -805,29 +617,6 @@ async def remove_member(startup_id: str, user_id: str, user=Depends(get_current_
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
     await db.startup_members.delete_one({"startup_id": startup_id, "user_id": user_id})
     return {"success": True}
-
-@api_router.put("/startups/{startup_id}/members/{user_id}/role")
-async def update_member_role(startup_id: str, user_id: str, body: RoleUpdate, user=Depends(get_current_user)):
-    """Update a member's role (founder only)"""
-    requester = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user.id}, {"_id": 0})
-    if not requester or requester["role"] != "founder":
-        raise HTTPException(status_code=403, detail="Only founders can change member roles")
-    if user_id == user.id:
-        raise HTTPException(status_code=400, detail="Cannot change your own role")
-    if body.role not in VALID_ROLES:
-        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}")
-    if body.role == "founder":
-        raise HTTPException(status_code=400, detail="Cannot promote to founder. Transfer ownership instead.")
-    
-    target_member = await db.startup_members.find_one({"startup_id": startup_id, "user_id": user_id}, {"_id": 0})
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Member not found")
-    
-    await db.startup_members.update_one(
-        {"startup_id": startup_id, "user_id": user_id},
-        {"$set": {"role": body.role}}
-    )
-    return {"success": True, "new_role": body.role}
 
 @api_router.get("/startups/{startup_id}/invite-code")
 async def get_invite_code(startup_id: str, user=Depends(get_current_user)):
@@ -1102,37 +891,32 @@ async def setup_demo():
 
 # ==================== APP SETUP ====================
 
-app.include_router(api_router)
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("StartupOps API starting up...")
-
-    try:
-        await db.profiles.create_index("id", unique=True)
-
-        await db.startups.create_index("id", unique=True)
-        await db.startups.create_index("invite_code", unique=True)
-
-        await db.startup_members.create_index(
-            [("startup_id", 1), ("user_id", 1)],
-            unique=True
-        )
-
-        await db.tasks.create_index("id", unique=True)
-        await db.tasks.create_index("startup_id")
-
-        await db.milestones.create_index("id", unique=True)
-        await db.milestones.create_index("startup_id")
-
-        await db.feedback.create_index("startup_id")
-        await db.subscriptions.create_index("startup_id")
-
-        logger.info("MongoDB indexes ensured")
-
-    except Exception as e:
-        logger.error(f"MongoDB index creation skipped: {e}")
+    await db.profiles.create_index("id", unique=True)
+    await db.startups.create_index("id", unique=True)
+    await db.startups.create_index("invite_code", unique=True)
+    await db.startup_members.create_index([("startup_id", 1), ("user_id", 1)])
+    await db.tasks.create_index("id", unique=True)
+    await db.tasks.create_index("startup_id")
+    await db.milestones.create_index("id", unique=True)
+    await db.milestones.create_index("startup_id")
+    await db.feedback.create_index("startup_id")
+    await db.subscriptions.create_index("startup_id")
+    logger.info("Database indexes created")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
