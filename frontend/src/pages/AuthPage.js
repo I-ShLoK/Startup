@@ -95,7 +95,7 @@ export default function AuthPage() {
       
       // Sign in with demo credentials
       const { error } = await supabase.auth.signInWithPassword({
-        email: 'demo@startupops.io',
+        email: 'demo@velora.io',
         password: 'DemoUser2026!',
       });
       if (error) {
