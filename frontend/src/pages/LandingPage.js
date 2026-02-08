@@ -148,8 +148,8 @@ export default function LandingPage() {
       <footer className="border-t border-border/40 py-8">
         <div className="container mx-auto px-6 flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <Rocket className="h-4 w-4 text-primary" />
-            <span className="font-semibold">StartupOps</span>
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="font-semibold">Velora</span>
           </div>
           <p>Team Hungry Cheetah</p>
         </div>
