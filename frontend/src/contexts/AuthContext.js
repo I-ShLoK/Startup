@@ -1,107 +1,171 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
-import axios from 'axios';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import { supabase } from "@/lib/supabase";
+import axios from "axios";
+
+/* =====================================================
+   BACKEND CONFIG — TOP LEVEL ONLY (VERY IMPORTANT)
+===================================================== */
+
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  process.env.REACT_APP_BACKEND_URL;
+
+if (!BACKEND_URL) {
+  throw new Error("❌ BACKEND URL NOT SET");
+}
+
+const API = `${BACKEND_URL}/api`;
+
+const apiClient = axios.create({
+  baseURL: API,
+});
+
+/* =====================================================
+   AUTH CONTEXT
+===================================================== */
 
 const AuthContext = createContext({});
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+export const useAuth = () => useContext(AuthContext);
 
-// Permission helpers based on user role in current startup
+/* =====================================================
+   ROLE / PERMISSIONS
+===================================================== */
+
 const PERMISSIONS = {
-  canManageContent: (role) => ['founder', 'manager'].includes(role),
-  canViewAnalytics: (role) => ['founder', 'manager'].includes(role),
-  canAccessPitch: (role) => role === 'founder',
-  canManageTeam: (role) => role === 'founder',
-  canManageStartup: (role) => role === 'founder',
+  canManageContent: (role) => ["founder", "manager"].includes(role),
+  canViewAnalytics: (role) => ["founder", "manager"].includes(role),
+  canAccessPitch: (role) => role === "founder",
+  canManageTeam: (role) => role === "founder",
+  canManageStartup: (role) => role === "founder",
 };
+
+/* =====================================================
+   PROVIDER
+===================================================== */
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [startupsLoaded, setStartupsLoaded] = useState(false);
-  const [currentStartup, setCurrentStartup] = useState(null);
-  const [startups, setStartups] = useState([]);
 
-  const getAuthHeaders = useCallback(() => {
-    if (!session?.access_token) return {};
-    return { Authorization: `Bearer ${session.access_token}` };
-  }, [session]);
+  const [startups, setStartups] = useState([]);
+  const [currentStartup, setCurrentStartup] = useState(null);
+  const [startupsLoaded, setStartupsLoaded] = useState(false);
+
+  /* -----------------------------
+     AUTH HEADERS
+  ----------------------------- */
+
+  const getAuthHeaders = useCallback(
+    () =>
+      session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {},
+    [session]
+  );
+
+  /* -----------------------------
+     PROFILE
+  ----------------------------- */
 
   const fetchProfile = useCallback(async (sess) => {
     try {
-     const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL ||
-  process.env.REACT_APP_BACKEND_URL;
-
-if (!BACKEND_URL) {
-  console.error("❌ BACKEND URL NOT SET");
-}
-
-export const API = `${BACKEND_URL}/api`;
-
-      const res = await axios.get(`${API}/auth/me`, {
+      const res = await apiClient.get("/auth/me", {
         headers: { Authorization: `Bearer ${sess.access_token}` },
       });
       setProfile(res.data);
-    } catch (e) {
+    } catch {
       try {
-        const res = await axios.post(`${API}/auth/verify`, {}, {
-          headers: { Authorization: `Bearer ${sess.access_token}` },
-        });
+        const res = await apiClient.post(
+          "/auth/verify",
+          {},
+          { headers: { Authorization: `Bearer ${sess.access_token}` } }
+        );
         setProfile(res.data);
       } catch (err) {
-        console.error('Failed to fetch/create profile', err);
+        console.error("❌ Failed to fetch/create profile", err);
       }
     }
   }, []);
 
+  /* -----------------------------
+     STARTUPS
+  ----------------------------- */
+
   const fetchStartups = useCallback(async (sess) => {
     try {
-      const res = await axios.get(`${API}/startups`, {
+      const res = await apiClient.get("/startups", {
         headers: { Authorization: `Bearer ${sess.access_token}` },
       });
-      setStartups(res.data);
-      if (res.data.length > 0) {
-        const saved = localStorage.getItem('currentStartupId');
-        const found = saved ? res.data.find(s => s.id === saved) : null;
-        setCurrentStartup(prev => prev || found || res.data[0]);
+
+      setStartups(res.data || []);
+
+      if (res.data?.length) {
+        const savedId = localStorage.getItem("currentStartupId");
+        const found = res.data.find((s) => s.id === savedId);
+        setCurrentStartup(found || res.data[0]);
       }
-    } catch (e) {
-      console.error('Failed to fetch startups', e);
+    } catch (err) {
+      console.error("❌ Failed to fetch startups", err);
     }
     setStartupsLoaded(true);
   }, []);
 
+  /* -----------------------------
+     INIT
+  ----------------------------- */
+
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      const sess = data?.session || null;
+
       setSession(sess);
-      setUser(sess?.user ?? null);
+      setUser(sess?.user || null);
+
       if (sess) {
         await Promise.all([fetchProfile(sess), fetchStartups(sess)]);
       } else {
         setStartupsLoaded(true);
       }
+
       setLoading(false);
-    });
+    };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess) {
-        setStartupsLoaded(false);
-        fetchProfile(sess);
-        fetchStartups(sess);
-      } else {
-        setProfile(null);
-        setStartups([]);
-        setCurrentStartup(null);
-        setStartupsLoaded(true);
+    init();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (_event, sess) => {
+        setSession(sess);
+        setUser(sess?.user || null);
+
+        if (sess) {
+          setStartupsLoaded(false);
+          await fetchProfile(sess);
+          await fetchStartups(sess);
+        } else {
+          setProfile(null);
+          setStartups([]);
+          setCurrentStartup(null);
+          setStartupsLoaded(true);
+        }
       }
-    });
+    );
 
-    return () => subscription.unsubscribe();
+    return () => listener.subscription.unsubscribe();
   }, [fetchProfile, fetchStartups]);
+
+  /* -----------------------------
+     ACTIONS
+  ----------------------------- */
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -110,42 +174,61 @@ export const API = `${BACKEND_URL}/api`;
     setSession(null);
     setStartups([]);
     setCurrentStartup(null);
-    setStartupsLoaded(false);
-    localStorage.removeItem('currentStartupId');
+    localStorage.removeItem("currentStartupId");
   };
 
   const selectStartup = (startup) => {
     setCurrentStartup(startup);
-    localStorage.setItem('currentStartupId', startup.id);
+    localStorage.setItem("currentStartupId", startup.id);
   };
 
   const refreshStartups = async () => {
     if (session) await fetchStartups(session);
   };
 
-  // Get current user's role in the selected startup
-  const userRole = useMemo(() => {
-    return currentStartup?.user_role || 'member';
-  }, [currentStartup]);
+  /* -----------------------------
+     PERMISSIONS
+  ----------------------------- */
 
-  // Permission check functions
-  const permissions = useMemo(() => ({
-    canManageContent: PERMISSIONS.canManageContent(userRole),
-    canViewAnalytics: PERMISSIONS.canViewAnalytics(userRole),
-    canAccessPitch: PERMISSIONS.canAccessPitch(userRole),
-    canManageTeam: PERMISSIONS.canManageTeam(userRole),
-    canManageStartup: PERMISSIONS.canManageStartup(userRole),
-  }), [userRole]);
+  const userRole = useMemo(
+    () => currentStartup?.user_role || "member",
+    [currentStartup]
+  );
+
+  const permissions = useMemo(
+    () => ({
+      canManageContent: PERMISSIONS.canManageContent(userRole),
+      canViewAnalytics: PERMISSIONS.canViewAnalytics(userRole),
+      canAccessPitch: PERMISSIONS.canAccessPitch(userRole),
+      canManageTeam: PERMISSIONS.canManageTeam(userRole),
+      canManageStartup: PERMISSIONS.canManageStartup(userRole),
+    }),
+    [userRole]
+  );
+
+  /* -----------------------------
+     PROVIDER
+  ----------------------------- */
 
   return (
-    <AuthContext.Provider value={{
-      user, profile, session, loading, startupsLoaded, signOut,
-      currentStartup, startups, selectStartup, refreshStartups,
-      getAuthHeaders, userRole, permissions,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        session,
+        loading,
+        startups,
+        startupsLoaded,
+        currentStartup,
+        selectStartup,
+        refreshStartups,
+        signOut,
+        getAuthHeaders,
+        userRole,
+        permissions,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
-
-export const useAuth = () => useContext(AuthContext);
